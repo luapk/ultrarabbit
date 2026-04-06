@@ -32,19 +32,20 @@
     const { useState, useEffect, useRef } = React;
 
 
-const MusicPlayer = ({ embedded = false }) => {
-  const [currentTrack, setCurrentTrack] = useState(0);
+const TRACKS = [
+  { title: 'THIS IS WHO WE ARE', src: 'ThisIsWhoWeAre.mp3' },
+  { title: 'WORKING FROM HOME', src: 'WorkingFromHome.mp3' },
+  { title: 'POCKET CALL', src: 'PocketCall.mp3' },
+];
+
+const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
 
-  const tracks = [
-    { title: 'THIS IS WHO WE ARE', src: 'ThisIsWhoWeAre.mp3' },
-    { title: 'WORKING FROM HOME', src: 'WorkingFromHome.mp3' },
-    { title: 'POCKET CALL', src: 'PocketCall.mp3' },
-  ];
+  const tracks = TRACKS;
 
   const formatTime = (s) => {
     if (!s || isNaN(s)) return '0:00';
@@ -565,10 +566,58 @@ const AboutSection = () => {
 
 const GigsSection = () => {
   const gigs = [
-    { date: 'MAY 16', year: '2026', venue: 'CAVENDISH ARMS', city: 'LONDON' },
-    { date: 'JUN 5', year: '2026', venue: 'FIDDLERS ELBOW', city: 'LONDON' },
-    { date: 'JUL 25', year: '2026', venue: 'SSSPUTNIK ELECTRONIC @ 229', city: 'LONDON' },
+    {
+      date: 'APR 3',
+      day: 'FRI',
+      year: '2026',
+      venue: 'POCO LOCO',
+      city: 'CHATHAM',
+      // noon on the day = safe cutoff
+      isoDate: '2026-04-03',
+    },
+    {
+      date: 'APR 12',
+      day: 'SUN',
+      year: '2026',
+      venue: "FIDDLER'S ELBOW",
+      city: 'LONDON',
+      isoDate: '2026-04-12',
+    },
+    {
+      date: 'MAY 16',
+      day: 'SAT',
+      year: '2026',
+      venue: 'CAVENDISH ARMS',
+      city: 'LONDON',
+      isoDate: '2026-05-16',
+    },
+    {
+      date: 'JUN 5',
+      day: 'FRI',
+      year: '2026',
+      venue: "WITH WE ARE NOT DEVO • FIDDLER'S ELBOW",
+      city: 'LONDON',
+      isoDate: '2026-06-05',
+    },
+    {
+      date: 'JUL 25',
+      day: 'SAT',
+      year: '2026',
+      venue: 'SPECIAL GUESTS FOR SIGUE SIGUE SPUTNIK ELECTRONIC • 229 VENUE 2',
+      city: 'LONDON',
+      isoDate: '2026-07-25',
+    },
   ];
+
+  const today = new Date();
+  // Set to start of today so a gig ON today is not struck out
+  today.setHours(0, 0, 0, 0);
+
+  const isPast = (isoDate) => {
+    const gigDate = new Date(isoDate);
+    gigDate.setHours(0, 0, 0, 0);
+    return gigDate < today;
+  };
 
   return (
     <section
@@ -583,46 +632,73 @@ const GigsSection = () => {
         <SectionHeader title="GIGS" />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {gigs.map((gig, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '100px 1fr',
-                gap: '40px',
-                alignItems: 'center',
-                padding: '32px 24px',
-                backgroundColor: '#111',
-                border: '1px solid #1a1a1a',
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#161616';
-                e.currentTarget.style.borderColor = '#ff2d2d';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#111';
-                e.currentTarget.style.borderColor = '#1a1a1a';
-              }}
-            >
-              <div>
-                <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '32px', color: '#ff2d2d', lineHeight: 1 }}>
-                  {gig.date}
+          {gigs.map((gig, index) => {
+            const past = isPast(gig.isoDate);
+            return (
+              <div
+                key={index}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '120px 1fr',
+                  gap: '40px',
+                  alignItems: 'center',
+                  padding: '32px 24px',
+                  backgroundColor: past ? '#0a0a0a' : '#111',
+                  border: `1px solid ${past ? '#141414' : '#1a1a1a'}`,
+                  transition: 'all 0.3s ease',
+                  opacity: past ? 0.45 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!past) {
+                    e.currentTarget.style.backgroundColor = '#161616';
+                    e.currentTarget.style.borderColor = '#ff2d2d';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!past) {
+                    e.currentTarget.style.backgroundColor = '#111';
+                    e.currentTarget.style.borderColor = '#1a1a1a';
+                  }
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: '"Bebas Neue", sans-serif',
+                      fontSize: '32px',
+                      color: past ? '#444' : '#ff2d2d',
+                      lineHeight: 1,
+                      textDecoration: past ? 'line-through' : 'none',
+                      textDecorationColor: '#ff2d2d',
+                    }}
+                  >
+                    {gig.date}
+                  </div>
+                  <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#333' }}>
+                    {gig.day} • {gig.year}
+                  </div>
                 </div>
-                <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#444' }}>
-                  {gig.year}
+                <div>
+                  <div
+                    style={{
+                      fontFamily: '"Bebas Neue", sans-serif',
+                      fontSize: '22px',
+                      color: past ? '#333' : '#fff',
+                      letterSpacing: '0.05em',
+                      textDecoration: past ? 'line-through' : 'none',
+                      textDecorationColor: '#444',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {gig.venue}
+                  </div>
+                  <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '12px', color: past ? '#2a2a2a' : '#666', marginTop: '4px' }}>
+                    {gig.city}
+                  </div>
                 </div>
               </div>
-              <div>
-                <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', color: '#fff', letterSpacing: '0.05em' }}>
-                  {gig.venue}
-                </div>
-                <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '12px', color: '#666' }}>
-                  {gig.city}
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
@@ -721,7 +797,7 @@ const MerchSection = () => {
   );
 };
 
-const ListenSection = () => {
+const ListenSection = ({ currentTrack, setCurrentTrack }) => {
   return (
     <section
       id="listen"
@@ -746,7 +822,7 @@ const ListenSection = () => {
             marginTop: '20px',
           }}
         >
-          <MusicPlayer embedded={true} />
+          <MusicPlayer embedded={true} currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} />
         </div>
         <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center' }}>
           <img src="rabbit.gif" alt="ULTRARABBIT" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
@@ -756,7 +832,43 @@ const ListenSection = () => {
   );
 };
 
-const LyricsSection = () => {
+const ALL_LYRICS = [
+  {
+    title: 'THIS IS WHO WE ARE',
+    stanzas: [
+      { label: 'V1', text: `we're blasting off\nwe're in control\nyou can't hold us back\nwe're standing tall\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: 'V2', text: `we're beautiful\nwe're in your face\nwe're first in line\nour rightful place\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: 'V3', text: `we're coming through\nwe're coming fast\neat our dust\nwe're screaming past\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: '// INSTRUMENTAL', text: null, muted: true },
+      { label: 'V4', text: `we're blasting off\nwe're in control\nyou can't hold us back\nwe're standing tall\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is our time\nthis is our time\nwe're leaving you behind now\nthis is our time` },
+    ],
+  },
+  {
+    title: 'WORKING FROM HOME',
+    stanzas: [
+      { label: 'V1', text: `when people say ease back\ni say fuck that\nthe night is young\ncome on\nlet's have fun\ngirls and boys\ntonight is my own\ni don't wanna go home\ni've got a shed to build\nand a wife to avoid` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway\nANY WAY!` },
+      { label: 'V2', text: `there's plenty of time\ntill the last train\ncome on everybody\nsame again\nno excuses\nyou can't go home\nleaving me here drinking\non my own` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway\nANY WAY!` },
+      { label: 'V3', text: `lying in bed\nwith the laptop open\nmoving the mouse\nso it looks like i'm working\nmy hangover's screaming\n'never again!!!'\nfuck that! tonight\ni want more of the same` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway` },
+    ],
+  },
+  {
+    title: 'POCKET CALL',
+    stanzas: [
+      { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
+      { label: 'V1', text: `what did you hear?\nwhat did i say?\nhow long were you listening\nanyway?\nwas it all muffled?\nwas it all clear?\nwhat did you hear?\nwhat did you hear?` },
+      { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
+      { label: 'V2', text: `where are you babe?\ni thought you were at home?\ni thought i heard voices\nbut you live alone\ner… yeah,\nthat must have been the tv\ni guess i pocket called\naccidentally, sorry` },
+      { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
+    ],
+  },
+];
+
+const LyricsSection = ({ currentTrack }) => {
+  const song = ALL_LYRICS[currentTrack];
+
   return (
     <section
       id="lyrics"
@@ -769,8 +881,18 @@ const LyricsSection = () => {
         <SectionHeader title="LYRICS" />
 
         <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '28px', color: '#ff2d2d', letterSpacing: '0.1em', marginBottom: '8px' }}>
-            THIS IS WHO WE ARE
+          <div
+            key={song.title}
+            style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: '28px',
+              color: '#ff2d2d',
+              letterSpacing: '0.1em',
+              marginBottom: '8px',
+              transition: 'opacity 0.3s ease',
+            }}
+          >
+            {song.title}
           </div>
           <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#444', marginBottom: '32px' }}>
             ULTRARABBIT
@@ -778,81 +900,21 @@ const LyricsSection = () => {
         </div>
 
         <div style={{ fontFamily: '"Space Mono", monospace', fontSize: '14px', color: '#999', lineHeight: 2.2, whiteSpace: 'pre-line' }}>
-          <div style={{ marginBottom: '32px' }}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#ff2d2d', letterSpacing: '0.2em', display: 'block', marginBottom: '12px' }}>V1</span>
-{`we're blasting off
-we're in control
-you can't hold us back
-we're standing tall
-the world is ours
-so it begins
-the ULTRARABBIT
-always wins
-this is who we are now
-this is what we do
-this is who we are now
-this is what we do`}
-          </div>
-
-          <div style={{ marginBottom: '32px' }}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#ff2d2d', letterSpacing: '0.2em', display: 'block', marginBottom: '12px' }}>V2</span>
-{`we're beautiful
-we're in your face
-we're first in line
-our rightful place
-the world is ours
-so it begins
-the ULTRARABBIT
-always wins
-this is who we are now
-this is what we do
-this is who we are now
-this is what we do`}
-          </div>
-
-          <div style={{ marginBottom: '32px' }}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#ff2d2d', letterSpacing: '0.2em', display: 'block', marginBottom: '12px' }}>V3</span>
-{`we're coming through
-we're coming fast
-eat our dust
-we're screaming past
-the world is ours
-so it begins
-the ULTRARABBIT
-always wins
-this is who we are now
-this is what we do
-this is who we are now
-this is what we do`}
-          </div>
-
-          <div style={{ marginBottom: '32px' }}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#444', letterSpacing: '0.2em', display: 'block', marginBottom: '12px' }}>// INSTRUMENTAL</span>
-          </div>
-
-          <div style={{ marginBottom: '0' }}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#ff2d2d', letterSpacing: '0.2em', display: 'block', marginBottom: '12px' }}>V4</span>
-{`we're blasting off
-we're in control
-you can't hold us back
-we're standing tall
-the world is ours
-so it begins
-the ULTRARABBIT
-always wins
-this is who we are now
-this is what we do
-this is who we are now
-this is what we do
-the world is ours
-so it begins
-the ULTRARABBIT
-always wins
-this is our time
-this is our time
-we're leaving you behind now
-this is our time`}
-          </div>
+          {song.stanzas.map((stanza, i) => (
+            <div key={i} style={{ marginBottom: i < song.stanzas.length - 1 ? '32px' : '0' }}>
+              <span style={{
+                fontFamily: '"Fira Code", monospace',
+                fontSize: '10px',
+                color: stanza.muted ? '#444' : '#ff2d2d',
+                letterSpacing: '0.2em',
+                display: 'block',
+                marginBottom: stanza.text ? '12px' : '0',
+              }}>
+                {stanza.label}
+              </span>
+              {stanza.text && stanza.text}
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -920,6 +982,7 @@ const Footer = () => {
 
 function UltraRabbitWebsite() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(0);
 
   const scrollToSection = (id) => {
     const element = document.getElementById(id);
@@ -934,8 +997,8 @@ function UltraRabbitWebsite() {
       <BurgerMenu isOpen={menuOpen} setIsOpen={setMenuOpen} scrollToSection={scrollToSection} />
       <AboutSection />
       <GigsSection />
-      <ListenSection />
-      <LyricsSection />
+      <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} />
+      <LyricsSection currentTrack={currentTrack} />
       <MerchSection />
       <Footer />
     </div>
@@ -943,7 +1006,6 @@ function UltraRabbitWebsite() {
 }
 
 
-    // Remove the inline <style> block from the component since styles are in <head>
     ReactDOM.createRoot(document.getElementById('root')).render(<UltraRabbitWebsite />);
   </script>
 </body>
