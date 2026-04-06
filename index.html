@@ -808,68 +808,67 @@ const RabbitVisualiser = ({ audioRef }) => {
     const mount = mountRef.current;
     if (!mount) return;
 
-    const W = mount.clientWidth;
+    // Width fallback — clientWidth can be 0 before layout
+    const W = mount.offsetWidth || 600;
     const H = 340;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 100);
-    camera.position.set(0, 0.2, 5);
+    camera.position.set(0, 0, 5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(W, H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
+    renderer.domElement.style.display = 'block';
     mount.appendChild(renderer.domElement);
 
-    // Lights — ambient + red point for flash effect
-    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-    scene.add(ambient);
-    const redPoint = new THREE.PointLight(0xff2d2d, 0, 8);
-    redPoint.position.set(1.5, 2, 2);
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const redPoint = new THREE.PointLight(0xff2d2d, 0, 10);
+    redPoint.position.set(2, 2, 3);
     scene.add(redPoint);
     stateRef.current.redPoint = redPoint;
 
-    // Wireframe material
     const wireMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       wireframe: true,
       emissive: new THREE.Color(0, 0, 0),
-      emissiveIntensity: 1,
     });
 
-    let rabbitGroup = null;
-    let baseScale = 1;
-    const meshData = []; // { mesh, originalPos }
+    const meshData = [];
 
     const loader = new THREE.GLTFLoader();
     const draco = new THREE.DRACOLoader();
     draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
     loader.setDRACOLoader(draco);
+
     loader.load(
       'rabbit__hase.glb',
       (gltf) => {
-        rabbitGroup = gltf.scene;
-        rabbitGroup.traverse((child) => {
+        const group = gltf.scene;
+
+        group.traverse((child) => {
           if (child.isMesh) {
             child.material = wireMat.clone();
-            // Store original vertex positions for displacement
             const posAttr = child.geometry.attributes.position;
-            meshData.push({
-              mesh: child,
-              original: new Float32Array(posAttr.array),
-            });
+            meshData.push({ mesh: child, original: new Float32Array(posAttr.array) });
           }
         });
 
-        // Auto-centre and fit to view
-        const box = new THREE.Box3().setFromObject(rabbitGroup);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        baseScale = 2.8 / Math.max(size.x, size.y, size.z);
-        rabbitGroup.position.sub(center.multiplyScalar(1));
-        rabbitGroup.scale.setScalar(baseScale);
-        scene.add(rabbitGroup);
-        stateRef.current.rabbitGroup = rabbitGroup;
+        // Step 1: compute raw bounding box to get scale
+        const rawBox = new THREE.Box3().setFromObject(group);
+        const rawSize = rawBox.getSize(new THREE.Vector3());
+        const baseScale = 2.6 / Math.max(rawSize.x, rawSize.y, rawSize.z);
+        group.scale.setScalar(baseScale);
+
+        // Step 2: re-measure AFTER scale to centre correctly
+        const scaledBox = new THREE.Box3().setFromObject(group);
+        const centre = scaledBox.getCenter(new THREE.Vector3());
+        group.position.sub(centre);
+
+        scene.add(group);
+        stateRef.current.rabbitGroup = group;
         stateRef.current.baseScale = baseScale;
         stateRef.current.meshData = meshData;
       },
@@ -877,35 +876,34 @@ const RabbitVisualiser = ({ audioRef }) => {
       (err) => console.warn('GLB load error:', err)
     );
 
-    // Audio analyser — set up on first play (browser autoplay policy)
-    let analyser = null;
-    let dataArray = null;
-
+    // Audio — singleton on window so createMediaElementSource is never called twice
     const setupAudio = () => {
-      if (analyser || !audioRef.current) return;
+      if (stateRef.current.analyser || !audioRef.current) return;
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = ctx.createMediaElementSource(audioRef.current);
-        analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.75;
-        src.connect(analyser);
-        analyser.connect(ctx.destination);
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-        stateRef.current.analyser = analyser;
-        stateRef.current.dataArray = dataArray;
+        if (!window._urAudioCtx) {
+          window._urAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          window._urSource = window._urAudioCtx.createMediaElementSource(audioRef.current);
+        }
+        const ctx = window._urAudioCtx;
+        const an = ctx.createAnalyser();
+        an.fftSize = 512;
+        an.smoothingTimeConstant = 0.78;
+        window._urSource.connect(an);
+        an.connect(ctx.destination);
+        const da = new Uint8Array(an.frequencyBinCount);
+        stateRef.current.analyser = an;
+        stateRef.current.dataArray = da;
       } catch (e) {
-        console.warn('Audio analyser setup:', e);
+        console.warn('Audio setup:', e);
       }
     };
 
     const audio = audioRef.current;
     if (audio) {
       if (!audio.paused) setupAudio();
-      else audio.addEventListener('play', setupAudio, { once: true });
+      audio.addEventListener('play', setupAudio, { once: true });
     }
 
-    // Animation loop
     let time = 0;
     let flashDecay = 0;
 
@@ -920,51 +918,38 @@ const RabbitVisualiser = ({ audioRef }) => {
       if (an && da) {
         an.getByteFrequencyData(da);
         const len = da.length;
-        // Bass: bins 0–8 (~0–400 Hz)
-        for (let i = 0; i < 8; i++) bass += da[i];
+        for (let i = 0; i < 8;  i++) bass += da[i];
         bass = bass / 8 / 255;
-        // Mid: bins 8–48
-        for (let i = 8; i < 48; i++) mid += da[i];
+        for (let i = 8; i < 48; i++) mid  += da[i];
         mid = mid / 40 / 255;
-        // Overall energy
         for (let i = 0; i < len; i++) overall += da[i];
         overall = overall / len / 255;
       }
 
       if (rg && bs) {
-        // Idle slow rotation + mid burst
         rg.rotation.y += 0.003 + mid * 0.04;
-        // Subtle y-bob when idle
-        rg.position.y = Math.sin(time * 0.8) * 0.04;
+        rg.position.y = Math.sin(time * 0.9) * 0.05;
 
-        // Bass pulse — scale
         const pulse = 1 + bass * 0.28;
         rg.scale.setScalar(bs * pulse);
 
-        // Red flash — decays quickly, spikes on bass transient
         flashDecay = Math.max(flashDecay - 0.04, bass * 1.6);
         const flash = Math.min(flashDecay, 1);
+        if (rp) rp.intensity = flash * 4;
 
-        if (rp) rp.intensity = flash * 3.5;
-
-        // Update each mesh material + vertex displacement
         if (md) {
           md.forEach(({ mesh, original }) => {
-            // Emissive red on beat
-            mesh.material.emissive.setRGB(flash * 0.9, 0, 0);
-            // Wire colour shifts warm on beat
-            mesh.material.color.setRGB(1, 1 - flash * 0.6, 1 - flash * 0.6);
-
-            // Vertex displacement — sin + sawtooth on loud moments
+            mesh.material.emissive.setRGB(flash * 0.85, 0, 0);
+            mesh.material.color.setRGB(1, 1 - flash * 0.55, 1 - flash * 0.55);
             if (overall > 0.08) {
               const posAttr = mesh.geometry.attributes.position;
-              const sawtooth = (time * 1.5) % 1;
+              const saw = (time * 1.5) % 1;
               for (let i = 0; i < posAttr.count; i++) {
                 const ix = i * 3;
-                const sin  = Math.sin(time * 6 + i * 0.15) * bass * 0.12;
-                const saw  = ((sawtooth + i * 0.007) % 1 - 0.5) * overall * 0.06;
+                const sin = Math.sin(time * 6 + i * 0.15) * bass * 0.12;
+                const sawtooth = ((saw + i * 0.007) % 1 - 0.5) * overall * 0.06;
                 posAttr.array[ix]     = original[ix]     + sin;
-                posAttr.array[ix + 1] = original[ix + 1] + sin + saw;
+                posAttr.array[ix + 1] = original[ix + 1] + sin + sawtooth;
                 posAttr.array[ix + 2] = original[ix + 2] + sin;
               }
               posAttr.needsUpdate = true;
@@ -978,7 +963,7 @@ const RabbitVisualiser = ({ audioRef }) => {
     animate();
 
     const onResize = () => {
-      const w = mount.clientWidth;
+      const w = mount.offsetWidth || 600;
       camera.aspect = w / H;
       camera.updateProjectionMatrix();
       renderer.setSize(w, H);
@@ -988,6 +973,7 @@ const RabbitVisualiser = ({ audioRef }) => {
     return () => {
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener('resize', onResize);
+      if (audio) audio.removeEventListener('play', setupAudio);
       renderer.dispose();
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
