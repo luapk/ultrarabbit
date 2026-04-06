@@ -27,6 +27,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -38,12 +41,11 @@ const TRACKS = [
   { title: 'POCKET CALL', src: 'PocketCall.mp3' },
 ];
 
-const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack }) => {
+const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack, audioRef }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const audioRef = useRef(null);
 
   const tracks = TRACKS;
 
@@ -797,7 +799,217 @@ const MerchSection = () => {
   );
 };
 
-const ListenSection = ({ currentTrack, setCurrentTrack }) => {
+const RabbitVisualiser = ({ audioRef }) => {
+  const mountRef = useRef(null);
+  const frameRef = useRef(null);
+  const stateRef = useRef({});
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const W = mount.clientWidth;
+    const H = 340;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 100);
+    camera.position.set(0, 0.2, 5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    mount.appendChild(renderer.domElement);
+
+    // Lights — ambient + red point for flash effect
+    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+    scene.add(ambient);
+    const redPoint = new THREE.PointLight(0xff2d2d, 0, 8);
+    redPoint.position.set(1.5, 2, 2);
+    scene.add(redPoint);
+    stateRef.current.redPoint = redPoint;
+
+    // Wireframe material
+    const wireMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      wireframe: true,
+      emissive: new THREE.Color(0, 0, 0),
+      emissiveIntensity: 1,
+    });
+
+    let rabbitGroup = null;
+    let baseScale = 1;
+    const meshData = []; // { mesh, originalPos }
+
+    const loader = new THREE.GLTFLoader();
+    const draco = new THREE.DRACOLoader();
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+    loader.setDRACOLoader(draco);
+    loader.load(
+      'rabbit__hase.glb',
+      (gltf) => {
+        rabbitGroup = gltf.scene;
+        rabbitGroup.traverse((child) => {
+          if (child.isMesh) {
+            child.material = wireMat.clone();
+            // Store original vertex positions for displacement
+            const posAttr = child.geometry.attributes.position;
+            meshData.push({
+              mesh: child,
+              original: new Float32Array(posAttr.array),
+            });
+          }
+        });
+
+        // Auto-centre and fit to view
+        const box = new THREE.Box3().setFromObject(rabbitGroup);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        baseScale = 2.8 / Math.max(size.x, size.y, size.z);
+        rabbitGroup.position.sub(center.multiplyScalar(1));
+        rabbitGroup.scale.setScalar(baseScale);
+        scene.add(rabbitGroup);
+        stateRef.current.rabbitGroup = rabbitGroup;
+        stateRef.current.baseScale = baseScale;
+        stateRef.current.meshData = meshData;
+      },
+      undefined,
+      (err) => console.warn('GLB load error:', err)
+    );
+
+    // Audio analyser — set up on first play (browser autoplay policy)
+    let analyser = null;
+    let dataArray = null;
+
+    const setupAudio = () => {
+      if (analyser || !audioRef.current) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaElementSource(audioRef.current);
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.75;
+        src.connect(analyser);
+        analyser.connect(ctx.destination);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        stateRef.current.analyser = analyser;
+        stateRef.current.dataArray = dataArray;
+      } catch (e) {
+        console.warn('Audio analyser setup:', e);
+      }
+    };
+
+    const audio = audioRef.current;
+    if (audio) {
+      if (!audio.paused) setupAudio();
+      else audio.addEventListener('play', setupAudio, { once: true });
+    }
+
+    // Animation loop
+    let time = 0;
+    let flashDecay = 0;
+
+    const animate = () => {
+      frameRef.current = requestAnimationFrame(animate);
+      time += 0.016;
+
+      const { analyser: an, dataArray: da, rabbitGroup: rg, baseScale: bs, meshData: md, redPoint: rp } = stateRef.current;
+
+      let bass = 0, mid = 0, overall = 0;
+
+      if (an && da) {
+        an.getByteFrequencyData(da);
+        const len = da.length;
+        // Bass: bins 0–8 (~0–400 Hz)
+        for (let i = 0; i < 8; i++) bass += da[i];
+        bass = bass / 8 / 255;
+        // Mid: bins 8–48
+        for (let i = 8; i < 48; i++) mid += da[i];
+        mid = mid / 40 / 255;
+        // Overall energy
+        for (let i = 0; i < len; i++) overall += da[i];
+        overall = overall / len / 255;
+      }
+
+      if (rg && bs) {
+        // Idle slow rotation + mid burst
+        rg.rotation.y += 0.003 + mid * 0.04;
+        // Subtle y-bob when idle
+        rg.position.y = Math.sin(time * 0.8) * 0.04;
+
+        // Bass pulse — scale
+        const pulse = 1 + bass * 0.28;
+        rg.scale.setScalar(bs * pulse);
+
+        // Red flash — decays quickly, spikes on bass transient
+        flashDecay = Math.max(flashDecay - 0.04, bass * 1.6);
+        const flash = Math.min(flashDecay, 1);
+
+        if (rp) rp.intensity = flash * 3.5;
+
+        // Update each mesh material + vertex displacement
+        if (md) {
+          md.forEach(({ mesh, original }) => {
+            // Emissive red on beat
+            mesh.material.emissive.setRGB(flash * 0.9, 0, 0);
+            // Wire colour shifts warm on beat
+            mesh.material.color.setRGB(1, 1 - flash * 0.6, 1 - flash * 0.6);
+
+            // Vertex displacement — sin + sawtooth on loud moments
+            if (overall > 0.08) {
+              const posAttr = mesh.geometry.attributes.position;
+              const sawtooth = (time * 1.5) % 1;
+              for (let i = 0; i < posAttr.count; i++) {
+                const ix = i * 3;
+                const sin  = Math.sin(time * 6 + i * 0.15) * bass * 0.12;
+                const saw  = ((sawtooth + i * 0.007) % 1 - 0.5) * overall * 0.06;
+                posAttr.array[ix]     = original[ix]     + sin;
+                posAttr.array[ix + 1] = original[ix + 1] + sin + saw;
+                posAttr.array[ix + 2] = original[ix + 2] + sin;
+              }
+              posAttr.needsUpdate = true;
+            }
+          });
+        }
+      }
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const onResize = () => {
+      const w = mount.clientWidth;
+      camera.aspect = w / H;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, H);
+    };
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={mountRef}
+      style={{
+        width: '100%',
+        height: '340px',
+        marginTop: '2px',
+        border: '1px solid #1a1a1a',
+        borderTop: 'none',
+        backgroundColor: '#050505',
+        overflow: 'hidden',
+      }}
+    />
+  );
+};
+
+const ListenSection = ({ currentTrack, setCurrentTrack, audioRef }) => {
   return (
     <section
       id="listen"
@@ -822,8 +1034,9 @@ const ListenSection = ({ currentTrack, setCurrentTrack }) => {
             marginTop: '20px',
           }}
         >
-          <MusicPlayer embedded={true} currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} />
+          <MusicPlayer embedded={true} currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
         </div>
+        <RabbitVisualiser audioRef={audioRef} />
         <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center' }}>
           <img src="rabbit.gif" alt="ULTRARABBIT" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
         </div>
@@ -983,6 +1196,7 @@ const Footer = () => {
 function UltraRabbitWebsite() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(0);
+  const audioRef = useRef(null);
 
   const scrollToSection = (id) => {
     const element = document.getElementById(id);
@@ -997,7 +1211,7 @@ function UltraRabbitWebsite() {
       <BurgerMenu isOpen={menuOpen} setIsOpen={setMenuOpen} scrollToSection={scrollToSection} />
       <AboutSection />
       <GigsSection />
-      <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} />
+      <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
       <LyricsSection currentTrack={currentTrack} />
       <MerchSection />
       <Footer />
