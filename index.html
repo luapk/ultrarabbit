@@ -48,6 +48,8 @@ const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack, audioRef
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const tracks = TRACKS;
+
   const formatTime = (s) => {
     if (!s || isNaN(s)) return '0:00';
     const mins = Math.floor(s / 60);
@@ -58,12 +60,18 @@ const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack, audioRef
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
     const onTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
       if (audio.duration) setProgress((audio.currentTime / audio.duration) * 100);
     };
     const onLoadedMetadata = () => setDuration(audio.duration);
-    const onEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    };
+
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
     audio.addEventListener('ended', onEnded);
@@ -77,50 +85,730 @@ const MusicPlayer = ({ embedded = false, currentTrack, setCurrentTrack, audioRef
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.src = TRACKS[currentTrack].src;
+    if (!tracks[currentTrack].src) {
+      audio.pause();
+      setIsPlaying(false);
+      setProgress(0);
+      setDuration(0);
+      setCurrentTime(0);
+      return;
+    }
+    audio.src = tracks[currentTrack].src;
     audio.load();
-    if (isPlaying) audio.play().catch(() => {});
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+    if (isPlaying) {
+      audio.play().catch(() => {});
+    }
   }, [currentTrack]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (isPlaying) { audio.pause(); setIsPlaying(false); }
-    else { audio.play().catch(() => {}); setIsPlaying(true); }
+    if (!audio || !tracks[currentTrack].src) return;
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play().catch(() => {});
+      setIsPlaying(true);
+    }
   };
 
-  const containerStyle = embedded ? { width: '100%', maxWidth: '400px', margin: '0 auto' } : { position: 'fixed', bottom: '24px', left: '24px', backgroundColor: 'rgba(0,0,0,0.9)', border: '1px solid #333', padding: '16px 20px', zIndex: 100, minWidth: '280px' };
+  const handleSeek = (e) => {
+    const audio = audioRef.current;
+    if (!audio || !audio.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = x / rect.width;
+    audio.currentTime = pct * audio.duration;
+  };
+
+  const handlePrev = () => {
+    const prev = currentTrack === 0 ? tracks.length - 1 : currentTrack - 1;
+    setCurrentTrack(prev);
+  };
+
+  const handleNext = () => {
+    const next = currentTrack === tracks.length - 1 ? 0 : currentTrack + 1;
+    setCurrentTrack(next);
+  };
+
+  const containerStyle = embedded
+    ? {
+        backgroundColor: 'transparent',
+        padding: '0',
+        width: '100%',
+        maxWidth: '400px',
+        margin: '0 auto',
+      }
+    : {
+        position: 'fixed',
+        bottom: '24px',
+        left: '24px',
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        border: '1px solid #333',
+        padding: '16px 20px',
+        zIndex: 100,
+        minWidth: '280px',
+      };
 
   return (
     <div style={containerStyle}>
       <audio ref={audioRef} preload="metadata" />
-      <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#666', marginBottom: '8px' }}>NOW PLAYING</div>
-      <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '20px', color: '#fff', letterSpacing: '0.1em', marginBottom: '4px' }}>{TRACKS[currentTrack].title}</div>
-      <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#ff2d2d', marginBottom: '12px' }}>ULTRARABBIT • {formatTime(currentTime)} / {formatTime(duration)}</div>
-      <div style={{ width: '100%', height: '2px', backgroundColor: '#222', marginBottom: '20px', cursor: 'pointer' }} onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * audioRef.current.duration; }}>
-        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: '#ff2d2d', transition: 'width 0.1s linear' }} />
+      <div
+        style={{
+          fontFamily: '"Fira Code", monospace',
+          fontSize: '10px',
+          color: '#666',
+          marginBottom: '8px',
+        }}
+      >
+        NOW PLAYING
       </div>
+      <div
+        style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: '20px',
+          color: '#fff',
+          letterSpacing: '0.1em',
+          marginBottom: '4px',
+        }}
+      >
+        {tracks[currentTrack].title}
+      </div>
+      <div
+        style={{
+          fontFamily: '"Fira Code", monospace',
+          fontSize: '11px',
+          color: '#ff2d2d',
+          marginBottom: '12px',
+        }}
+      >
+        ULTRARABBIT • {formatTime(currentTime)} / {formatTime(duration)}
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          height: '2px',
+          backgroundColor: '#222',
+          marginBottom: '20px',
+          cursor: tracks[currentTrack].src ? 'pointer' : 'default',
+        }}
+        onClick={handleSeek}
+      >
+        <div
+          style={{
+            width: `${progress}%`,
+            height: '100%',
+            backgroundColor: '#ff2d2d',
+            transition: 'width 0.1s linear',
+          }}
+        />
+      </div>
+
+      {/* NEW BUTTON STYLE SECTION */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button onClick={() => setCurrentTrack(currentTrack === 0 ? TRACKS.length - 1 : currentTrack - 1)} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#000"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+        <button
+          onClick={handlePrev}
+          style={{
+            background: '#fff',
+            border: 'none',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#000">
+            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+          </svg>
         </button>
-        <button onClick={togglePlay} style={{ background: '#ff2d2d', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {isPlaying ? <svg width="16" height="16" viewBox="0 0 24 24" fill="#000"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg> : <svg width="16" height="16" viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z" /></svg>}
+
+        <button
+          onClick={togglePlay}
+          style={{
+            background: tracks[currentTrack].src ? '#ff2d2d' : '#333',
+            border: 'none',
+            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            cursor: tracks[currentTrack].src ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={(e) => tracks[currentTrack].src && (e.currentTarget.style.transform = 'scale(1.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          {isPlaying ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#000">
+              <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#000">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
         </button>
-        <button onClick={() => setCurrentTrack(currentTrack === TRACKS.length - 1 ? 0 : currentTrack + 1)} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#000"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+
+        <button
+          onClick={handleNext}
+          style={{
+            background: '#fff',
+            border: 'none',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#000">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+          </svg>
         </button>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+          {tracks.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentTrack(idx)}
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: idx === currentTrack ? '#ff2d2d' : '#333',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                transition: 'background-color 0.2s',
+              }}
+            />
+          ))}
+        </div>
       </div>
+      {/* END NEW BUTTON STYLE SECTION */}
     </div>
   );
 };
 
-const SectionHeader = ({ title }) => (
-  <div style={{ marginBottom: '48px', display: 'inline-block' }}>
-    <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: 'clamp(96px, 16vw, 144px)', color: '#fff', letterSpacing: '0.1em', lineHeight: 1 }}>{title}</h2>
-    <div style={{ width: '100%', height: '1px', backgroundColor: '#ff2d2d' }} />
-  </div>
-);
+const BurgerMenu = ({ isOpen, setIsOpen, scrollToSection }) => {
+  const menuItems = [
+    { name: 'ABOUT', id: 'about' },
+    { name: 'GIGS', id: 'gigs' },
+    { name: 'LISTEN', id: 'listen' },
+    { name: 'LYRICS', id: 'lyrics' },
+    { name: 'MERCH', id: 'merch', comingSoon: true },
+  ];
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 1001,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '10px',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <span
+            style={{
+              display: 'block',
+              width: '32px',
+              height: '2px',
+              backgroundColor: '#fff',
+              transition: 'all 0.3s ease',
+              transform: isOpen ? 'rotate(45deg) translate(6px, 6px)' : 'none',
+            }}
+          />
+          <span
+            style={{
+              display: 'block',
+              width: '32px',
+              height: '2px',
+              backgroundColor: '#fff',
+              transition: 'all 0.3s ease',
+              opacity: isOpen ? 0 : 1,
+            }}
+          />
+          <span
+            style={{
+              display: 'block',
+              width: '32px',
+              height: '2px',
+              backgroundColor: '#fff',
+              transition: 'all 0.3s ease',
+              transform: isOpen ? 'rotate(-45deg) translate(6px, -6px)' : 'none',
+            }}
+          />
+        </div>
+      </button>
+
+      <nav
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: isOpen ? '100%' : '0',
+          height: '100vh',
+          backgroundColor: 'rgba(0,0,0,0.97)',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          overflow: 'hidden',
+          transition: 'width 0.4s cubic-bezier(0.77, 0, 0.175, 1)',
+        }}
+      >
+        {menuItems.map((item, index) => (
+          <button
+            key={item.name}
+            onClick={() => {
+              if (!item.comingSoon) {
+                scrollToSection(item.id);
+                setIsOpen(false);
+              }
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: 'clamp(48px, 10vw, 96px)',
+              color: item.comingSoon ? '#333' : '#fff',
+              cursor: item.comingSoon ? 'default' : 'pointer',
+              letterSpacing: '0.1em',
+              padding: '10px 40px',
+              position: 'relative',
+              transition: 'all 0.3s ease',
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? 'translateX(0)' : 'translateX(100px)',
+              transitionDelay: `${index * 0.1}s`,
+            }}
+            onMouseEnter={(e) => {
+              if (!item.comingSoon) {
+                e.target.style.color = '#ff2d2d';
+                e.target.style.letterSpacing = '0.2em';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!item.comingSoon) {
+                e.target.style.color = '#fff';
+                e.target.style.letterSpacing = '0.1em';
+              }
+            }}
+          >
+            {item.name}
+            {item.comingSoon && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: '-20px',
+                  transform: 'translateY(-50%) rotate(-5deg)',
+                  fontSize: '12px',
+                  fontFamily: '"Fira Code", monospace',
+                  color: '#ff2d2d',
+                  border: '1px solid #ff2d2d',
+                  padding: '4px 8px',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                SOON
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+};
+
+
+const SectionHeader = ({ title }) => {
+  const headerRef = useRef(null);
+  const [lineWidth, setLineWidth] = useState(0);
+
+  useEffect(() => {
+    if (headerRef.current) {
+      setLineWidth(headerRef.current.offsetWidth);
+    }
+    const handleResize = () => {
+      if (headerRef.current) {
+        setLineWidth(headerRef.current.offsetWidth);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [title]);
+
+  return (
+    <div style={{ marginBottom: '48px', display: 'inline-block' }}>
+      <h2
+        ref={headerRef}
+        style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: 'clamp(96px, 16vw, 144px)',
+          color: '#fff',
+          letterSpacing: '0.1em',
+          marginBottom: '16px',
+          lineHeight: 1,
+          display: 'inline-block',
+        }}
+      >
+        {title}
+      </h2>
+      <div
+        style={{
+          width: `${lineWidth}px`,
+          height: '1px',
+          backgroundColor: '#ff2d2d',
+          transition: 'width 0.3s ease',
+        }}
+      />
+    </div>
+  );
+};
+
+const AboutSection = () => {
+  return (
+    <section
+      id="about"
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#000',
+        padding: '0 0 80px 0',
+      }}
+    >
+      {/* Logo header image */}
+      <div
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '60px 40px',
+        }}
+      >
+        <img
+          src="logo.jpg"
+          alt="ULTRARABBIT"
+          style={{
+            width: '100%',
+            maxWidth: '900px',
+            height: 'auto',
+            objectFit: 'contain',
+          }}
+        />
+      </div>
+
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 40px' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '60px',
+            alignItems: 'start',
+          }}
+        >
+          <div>
+            <SectionHeader title="ABOUT" />
+            <p
+              style={{
+                fontFamily: '"Space Mono", monospace',
+                fontSize: '14px',
+                color: '#999',
+                lineHeight: 2,
+                marginBottom: '24px',
+              }}
+            >
+              ULTRARABBIT are a music band formed by Andy H, Eva M and Paul K in 2026 in London. They create electronic dance music blending house, funk, disco, and rock while wearing sharp suits and rabbit ears.
+            </p>
+          </div>
+
+          {/* Band video */}
+          <div
+            style={{
+              aspectRatio: '9/16',
+              maxWidth: '340px',
+              width: '100%',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid #1a1a1a',
+              overflow: 'hidden',
+            }}
+          >
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            >
+              <source src="ULTRARABBIT.mp4" type="video/mp4" />
+            </video>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+
+const GigsSection = () => {
+  const gigs = [
+    {
+      date: 'APR 3',
+      day: 'FRI',
+      year: '2026',
+      venue: 'POCO LOCO',
+      city: 'CHATHAM',
+      // noon on the day = safe cutoff
+      isoDate: '2026-04-03',
+    },
+    {
+      date: 'APR 12',
+      day: 'SUN',
+      year: '2026',
+      venue: "FIDDLER'S ELBOW",
+      city: 'LONDON',
+      isoDate: '2026-04-12',
+    },
+    {
+      date: 'MAY 16',
+      day: 'SAT',
+      year: '2026',
+      venue: 'CAVENDISH ARMS',
+      city: 'LONDON',
+      isoDate: '2026-05-16',
+    },
+    {
+      date: 'JUN 5',
+      day: 'FRI',
+      year: '2026',
+      venue: "WITH WE ARE NOT DEVO • FIDDLER'S ELBOW",
+      city: 'LONDON',
+      isoDate: '2026-06-05',
+    },
+    {
+      date: 'JUL 25',
+      day: 'SAT',
+      year: '2026',
+      venue: 'SPECIAL GUESTS FOR SIGUE SIGUE SPUTNIK ELECTRONIC • 229 VENUE 2',
+      city: 'LONDON',
+      isoDate: '2026-07-25',
+    },
+  ];
+
+  const today = new Date();
+  // Set to start of today so a gig ON today is not struck out
+  today.setHours(0, 0, 0, 0);
+
+  const isPast = (isoDate) => {
+    const gigDate = new Date(isoDate);
+    gigDate.setHours(0, 0, 0, 0);
+    return gigDate < today;
+  };
+
+  return (
+    <section
+      id="gigs"
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#0a0a0a',
+        padding: '120px 40px',
+      }}
+    >
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <SectionHeader title="GIGS" />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {gigs.map((gig, index) => {
+            const past = isPast(gig.isoDate);
+            return (
+              <div
+                key={index}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '120px 1fr',
+                  gap: '40px',
+                  alignItems: 'center',
+                  padding: '32px 24px',
+                  backgroundColor: past ? '#0a0a0a' : '#111',
+                  border: `1px solid ${past ? '#141414' : '#1a1a1a'}`,
+                  transition: 'all 0.3s ease',
+                  opacity: past ? 0.45 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!past) {
+                    e.currentTarget.style.backgroundColor = '#161616';
+                    e.currentTarget.style.borderColor = '#ff2d2d';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!past) {
+                    e.currentTarget.style.backgroundColor = '#111';
+                    e.currentTarget.style.borderColor = '#1a1a1a';
+                  }
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: '"Bebas Neue", sans-serif',
+                      fontSize: '32px',
+                      color: past ? '#444' : '#ff2d2d',
+                      lineHeight: 1,
+                      textDecoration: past ? 'line-through' : 'none',
+                      textDecorationColor: '#ff2d2d',
+                    }}
+                  >
+                    {gig.date}
+                  </div>
+                  <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#333' }}>
+                    {gig.day} • {gig.year}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: '"Bebas Neue", sans-serif',
+                      fontSize: '22px',
+                      color: past ? '#333' : '#fff',
+                      letterSpacing: '0.05em',
+                      textDecoration: past ? 'line-through' : 'none',
+                      textDecorationColor: '#444',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {gig.venue}
+                  </div>
+                  <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '12px', color: past ? '#2a2a2a' : '#666', marginTop: '4px' }}>
+                    {gig.city}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const MerchSection = () => {
+  return (
+    <section
+      id="merch"
+      style={{
+        minHeight: '60vh',
+        backgroundColor: '#000',
+        padding: '120px 40px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'repeating-linear-gradient(90deg, transparent, transparent 100px, rgba(255,45,45,0.02) 100px, rgba(255,45,45,0.02) 101px)',
+        }}
+      />
+      <div style={{ textAlign: 'center', position: 'relative' }}>
+        <h2
+          style={{
+            fontFamily: '"Bebas Neue", sans-serif',
+            fontSize: 'clamp(96px, 16vw, 192px)',
+            color: '#1a1a1a',
+            letterSpacing: '0.2em',
+            marginBottom: '24px',
+          }}
+        >
+          MERCH
+        </h2>
+        <div
+          style={{
+            fontFamily: '"Fira Code", monospace',
+            fontSize: '14px',
+            color: '#ff2d2d',
+            letterSpacing: '0.3em',
+            animation: 'pulse 2s infinite',
+          }}
+        >
+          [ COMING SOON ]
+        </div>
+        <p
+          style={{
+            fontFamily: '"Space Mono", monospace',
+            fontSize: '12px',
+            color: '#333',
+            marginTop: '40px',
+            maxWidth: '400px',
+          }}
+        >
+          Apparel and artifacts loading... Enter your signal below for early access.
+        </p>
+        <div style={{ marginTop: '32px', display: 'flex', gap: '0', justifyContent: 'center' }}>
+          <input
+            type="email"
+            placeholder="EMAIL@SIGNAL.COM"
+            style={{
+              fontFamily: '"Fira Code", monospace',
+              fontSize: '12px',
+              padding: '14px 20px',
+              backgroundColor: '#111',
+              border: '1px solid #222',
+              color: '#fff',
+              outline: 'none',
+              width: '240px',
+              letterSpacing: '0.05em',
+            }}
+          />
+          <button
+            style={{
+              fontFamily: '"Fira Code", monospace',
+              fontSize: '12px',
+              padding: '14px 24px',
+              backgroundColor: '#ff2d2d',
+              border: 'none',
+              color: '#000',
+              cursor: 'pointer',
+              letterSpacing: '0.1em',
+            }}
+          >
+            NOTIFY
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const RabbitVisualiser = ({ audioRef }) => {
   const mountRef = useRef(null);
@@ -129,153 +817,426 @@ const RabbitVisualiser = ({ audioRef }) => {
 
   useEffect(() => {
     const mount = mountRef.current;
+    if (!mount) return;
+
+    const W = mount.offsetWidth || window.innerWidth;
+    const H = mount.offsetHeight || window.innerHeight;
+
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.z = 5;
+    const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 100);
+    camera.position.set(0, 0, 5);
+
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.domElement.style.display = 'block';
     mount.appendChild(renderer.domElement);
+
+    const meshData = [];
 
     const loader = new THREE.GLTFLoader();
     const draco = new THREE.DRACOLoader();
-    draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
     loader.setDRACOLoader(draco);
 
     loader.load('rabbit.glb', (gltf) => {
-      const model = gltf.scene;
-      const meshData = [];
-      model.traverse((child) => {
-        if (child.isMesh) {
-          let geo = child.geometry.clone();
+      // Clone scene so we can freely mutate geometry/material
+      const sceneClone = gltf.scene.clone(true);
+
+      sceneClone.traverse((child) => {
+        if (!child.isMesh) return;
+
+        let geo = child.geometry.clone();
+
+        // Aggressively simplify to low-poly — target ~5% of original vertices
+        try {
+          // Strip to position-only so SimplifyModifier doesn't choke on extra attributes
           const posOnly = new THREE.BufferGeometry();
           posOnly.setAttribute('position', geo.attributes.position.clone());
           if (geo.index) posOnly.setIndex(geo.index.clone());
-          const merged = THREE.BufferGeometryUtils.mergeVertices(posOnly, 0.001);
-          const keepCount = Math.max(120, Math.floor(merged.attributes.position.count * 0.05));
-          geo = new THREE.SimplifyModifier().modify(merged, merged.attributes.position.count - keepCount);
-          child.geometry = geo;
-          child.material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
-          meshData.push({ mesh: child, original: new Float32Array(geo.attributes.position.array) });
-        }
-      });
-      const box = new THREE.Box3().setFromObject(model);
-      const center = box.getCenter(new THREE.Vector3());
-      model.position.sub(center);
-      const baseScale = 2.5 / box.getSize(new THREE.Vector3()).y;
-      const group = new THREE.Group();
-      group.scale.setScalar(baseScale);
-      group.add(model);
-      scene.add(group);
-      stateRef.current = { group, baseScale, meshData };
-    });
 
+          const merged = THREE.BufferGeometryUtils.mergeVertices(posOnly, 0.001);
+          const currentCount = merged.attributes.position.count;
+          const keepCount = Math.max(120, Math.floor(currentCount * 0.05));
+          const toRemove = currentCount - keepCount;
+
+          if (toRemove > 0) {
+            const modifier = new THREE.SimplifyModifier();
+            geo = modifier.modify(merged, toRemove);
+          } else {
+            geo = merged;
+          }
+          geo.computeVertexNormals();
+        } catch (e) {
+          // Fallback: EdgesGeometry shows structural edges on dense mesh
+          console.warn('Simplify fallback:', e.message);
+          geo = new THREE.EdgesGeometry(child.geometry, 20);
+        }
+
+        child.geometry = geo;
+        child.material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+
+        const posAttr = geo.attributes.position;
+        if (posAttr) meshData.push({ mesh: child, original: new Float32Array(posAttr.array) });
+      });
+
+      // Centre using raw (unscaled) bounding box, then let outerGroup carry the scale
+      const rawBox = new THREE.Box3().setFromObject(sceneClone);
+      const rawCenter = rawBox.getCenter(new THREE.Vector3());
+      const rawSize = rawBox.getSize(new THREE.Vector3());
+
+      sceneClone.position.sub(rawCenter); // centre at origin
+      const baseScale = 2.0 / Math.max(rawSize.x, rawSize.y, rawSize.z);
+
+      // outerGroup handles rotation, bob, scale — sceneClone just stays centred inside it
+      const outerGroup = new THREE.Group();
+      outerGroup.scale.setScalar(baseScale);
+      outerGroup.add(sceneClone);
+      scene.add(outerGroup);
+
+      stateRef.current.outerGroup = outerGroup;
+      stateRef.current.baseScale = baseScale;
+      stateRef.current.meshData = meshData;
+    }, undefined, (err) => console.warn('GLB error:', err));
+
+    // Audio — window singleton prevents double createMediaElementSource
     const setupAudio = () => {
       if (stateRef.current.analyser || !audioRef.current) return;
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = ctx.createMediaElementSource(audioRef.current);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
-      stateRef.current.analyser = analyser;
-      stateRef.current.dataArray = new Uint8Array(analyser.frequencyBinCount);
+      try {
+        if (!window._urAudioCtx) {
+          window._urAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          window._urSource = window._urAudioCtx.createMediaElementSource(audioRef.current);
+        }
+        const an = window._urAudioCtx.createAnalyser();
+        an.fftSize = 512;
+        an.smoothingTimeConstant = 0.75;
+        window._urSource.connect(an);
+        an.connect(window._urAudioCtx.destination);
+        stateRef.current.analyser = an;
+        stateRef.current.dataArray = new Uint8Array(an.frequencyBinCount);
+      } catch (e) { console.warn('Audio:', e); }
     };
-    audioRef.current?.addEventListener('play', setupAudio, { once: true });
+
+    const audio = audioRef.current;
+    if (audio) {
+      if (!audio.paused) setupAudio();
+      audio.addEventListener('play', setupAudio, { once: true });
+    }
+
+    let time = 0;
+    let flashDecay = 0;
 
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
-      const { group, meshData, analyser, dataArray, baseScale } = stateRef.current;
-      let bass = 0;
-      if (analyser) {
-        analyser.getByteFrequencyData(dataArray);
-        bass = dataArray[0] / 255;
+      time += 0.016;
+
+      const { analyser: an, dataArray: da, outerGroup: rg, baseScale: bs, meshData: md } = stateRef.current;
+
+      let bass = 0, mid = 0, overall = 0;
+      if (an && da) {
+        an.getByteFrequencyData(da);
+        const len = da.length;
+        for (let i = 0; i < 8;  i++) bass    += da[i]; bass    = bass    / 8   / 255;
+        for (let i = 8; i < 48; i++) mid     += da[i]; mid     = mid     / 40  / 255;
+        for (let i = 0; i < len; i++) overall += da[i]; overall = overall / len / 255;
       }
-      if (group) {
-        group.rotation.y += 0.005 + bass * 0.02;
-        group.scale.setScalar(baseScale * (1 + bass * 0.2));
-        meshData.forEach(({ mesh, original }) => {
-          const pos = mesh.geometry.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            const ix = i * 3;
-            pos.array[ix+1] = original[ix+1] + Math.sin(Date.now() * 0.005 + i) * bass * 0.1;
-          }
-          pos.needsUpdate = true;
-          mesh.material.color.setRGB(1, 1 - bass, 1 - bass);
-        });
+
+      // Algorithmic camera zoom — slow sine oscillation, pulled closer on bass hits
+      const zoomTarget = 4.2 + Math.sin(time * 0.18) * 3.0 - bass * 2.0;
+      camera.position.z += (Math.max(0.5, zoomTarget) - camera.position.z) * 0.03;
+
+      if (rg && bs) {
+        // Rotation — base carousel + mid burst
+        rg.rotation.y += 0.004 + mid * 0.05;
+        // Gentle nodding tilt
+        rg.rotation.x = Math.sin(time * 0.11) * 0.1;
+        // Bob
+        rg.position.y = Math.sin(time * 0.85) * 0.08;
+        // Scale pulse on bass
+        const pulse = 1 + bass * 0.32;
+        rg.scale.setScalar(bs * pulse);
+
+        // Flash decay
+        flashDecay = Math.max(flashDecay - 0.05, bass * 1.9);
+        const flash = Math.min(flashDecay, 1);
+
+        if (md) {
+          md.forEach(({ mesh, original }) => {
+            // White → red on beat
+            mesh.material.color.setRGB(1, 1 - flash * 0.85, 1 - flash * 0.85);
+
+            // Vertex morphing — sin wave + sawtooth, scaled to energy
+            const posAttr = mesh.geometry.attributes.position;
+            if (!posAttr) return;
+            const energy = Math.max(overall - 0.04, 0);
+            const saw = (time * 1.8) % 1;
+            for (let i = 0; i < posAttr.count; i++) {
+              const ix = i * 3;
+              const sin1 = Math.sin(time * 5.5 + i * 0.22) * (bass * 0.18 + energy * 0.04);
+              const sin2 = Math.cos(time * 3.2 + i * 0.13) * (mid  * 0.10 + energy * 0.02);
+              const sawtooth = ((saw + i * 0.011) % 1 - 0.5) * overall * 0.12;
+              posAttr.array[ix]     = original[ix]     + sin1;
+              posAttr.array[ix + 1] = original[ix + 1] + sin2 + sawtooth;
+              posAttr.array[ix + 2] = original[ix + 2] + sin1 * 0.6;
+            }
+            posAttr.needsUpdate = true;
+          });
+        }
       }
+
       renderer.render(scene, camera);
     };
     animate();
-    const onResize = () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); };
+
+    const onResize = () => {
+      const w = mount.offsetWidth || window.innerWidth;
+      const h = mount.offsetHeight || window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
     window.addEventListener('resize', onResize);
-    return () => { cancelAnimationFrame(frameRef.current); window.removeEventListener('resize', onResize); };
+
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', onResize);
+      if (audio) audio.removeEventListener('play', setupAudio);
+      renderer.dispose();
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+    };
   }, []);
-  return <div ref={mountRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none' }} />;
+
+  return (
+    <div
+      ref={mountRef}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+      }}
+    />
+  );
+};
+
+const ListenSection = ({ currentTrack, setCurrentTrack, audioRef }) => {
+  return (
+    <section
+      id="listen"
+      style={{
+        minHeight: '80vh',
+        backgroundColor: 'transparent',
+        padding: '120px 40px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        zIndex: 1,
+      }}
+    >
+      <div style={{ maxWidth: '600px', width: '100%', textAlign: 'center' }}>
+        <SectionHeader title="LISTEN" />
+        <div
+          style={{
+            backgroundColor: 'rgba(10, 10, 10, 0.75)',
+            border: '1px solid #222',
+            padding: '40px',
+            marginTop: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <MusicPlayer embedded={true} currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
+        </div>
+      </div>
+    </section>
+  );
 };
 
 const ALL_LYRICS = [
   {
     title: 'THIS IS WHO WE ARE',
     stanzas: [
-      { label: 'V1', text: `we're blasting off\nwe're in control\nyou can't hold us back\nwe're standing tall\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins` },
-      { label: 'CHORUS', text: `this is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
-      { label: 'V2', text: `we're beautiful\nwe're in your face\nwe're first in line\nour rightful place\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins` }
+      { label: 'V1', text: `we're blasting off\nwe're in control\nyou can't hold us back\nwe're standing tall\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: 'V2', text: `we're beautiful\nwe're in your face\nwe're first in line\nour rightful place\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: 'V3', text: `we're coming through\nwe're coming fast\neat our dust\nwe're screaming past\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do` },
+      { label: '// INSTRUMENTAL', text: null, muted: true },
+      { label: 'V4', text: `we're blasting off\nwe're in control\nyou can't hold us back\nwe're standing tall\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is who we are now\nthis is what we do\nthis is who we are now\nthis is what we do\nthe world is ours\nso it begins\nthe ULTRARABBIT\nalways wins\nthis is our time\nthis is our time\nwe're leaving you behind now\nthis is our time` },
     ],
   },
   {
     title: 'WORKING FROM HOME',
     stanzas: [
-      { label: 'V1', text: `when people say ease back\ni say fuck that\nthe night is young\ncome on\nlet's have fun` },
-      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway` }
+      { label: 'V1', text: `when people say ease back\ni say fuck that\nthe night is young\ncome on\nlet's have fun\ngirls and boys\ntonight is my own\ni don't wanna go home\ni've got a shed to build\nand a wife to avoid` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway\nANY WAY!` },
+      { label: 'V2', text: `there's plenty of time\ntill the last train\ncome on everybody\nsame again\nno excuses\nyou can't go home\nleaving me here drinking\non my own` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway\nANY WAY!` },
+      { label: 'V3', text: `lying in bed\nwith the laptop open\nmoving the mouse\nso it looks like i'm working\nmy hangover's screaming\n'never again!!!'\nfuck that! tonight\ni want more of the same` },
+      { label: 'CHORUS', text: `let's party like we don't have work in the morning\nthe worst that can happen\nis a written warning\nnext round's on me\nwhat do you say?\ni'm working from home\ntomorrow anyway` },
     ],
   },
   {
     title: 'POCKET CALL',
     stanzas: [
       { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
-      { label: 'V1', text: `what did you hear?\nwhat did i say?\nhow long were you listening\nanyway?` }
+      { label: 'V1', text: `what did you hear?\nwhat did i say?\nhow long were you listening\nanyway?\nwas it all muffled?\nwas it all clear?\nwhat did you hear?\nwhat did you hear?` },
+      { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
+      { label: 'V2', text: `where are you babe?\ni thought you were at home?\ni thought i heard voices\nbut you live alone\ner… yeah,\nthat must have been the tv\ni guess i pocket called\naccidentally, sorry` },
+      { label: 'CHORUS', text: `hey babe did you mean\nto ring?\ngod, sorry no\nit was a pocket call\ndid you mean to ring me\nat all?\nno sorry no\nit was a pocket call` },
     ],
   },
 ];
 
-const UltraRabbitWebsite = () => {
-  const [currentTrack, setCurrentTrack] = useState(0);
-  const audioRef = useRef(null);
-  return (
-    <div style={{ backgroundColor: '#000', color: '#fff', minHeight: '100vh', fontFamily: '"Space Mono", monospace' }}>
-      <section id="about" style={{ padding: '80px 40px', textAlign: 'center' }}>
-        <img src="logo.jpg" style={{ width: '100%', maxWidth: '800px', marginBottom: '40px' }} />
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <SectionHeader title="ABOUT" />
-          <p style={{ color: '#999', lineHeight: 2 }}>ULTRARABBIT are a music band formed in 2026. Electronic dance music blending house, funk, and rock with sharp suits and rabbit ears.</p>
-        </div>
-      </section>
+const LyricsSection = ({ currentTrack }) => {
+  const song = ALL_LYRICS[currentTrack];
 
-      <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
-        <RabbitVisualiser audioRef={audioRef} />
-        <section id="listen" style={{ position: 'relative', zIndex: 1, padding: '120px 40px', textAlign: 'center' }}>
-          <SectionHeader title="LISTEN" />
-          <div style={{ backgroundColor: 'rgba(10,10,10,0.8)', padding: '40px', border: '1px solid #222', display: 'inline-block' }}>
-            <MusicPlayer embedded={true} currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
+  return (
+    <section
+      id="lyrics"
+      style={{
+        backgroundColor: 'transparent',
+        padding: '120px 40px',
+        position: 'relative',
+        zIndex: 1,
+      }}
+    >
+      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <SectionHeader title="LYRICS" />
+
+        <div style={{ marginBottom: '24px' }}>
+          <div
+            key={song.title}
+            style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: '28px',
+              color: '#ff2d2d',
+              letterSpacing: '0.1em',
+              marginBottom: '8px',
+              transition: 'opacity 0.3s ease',
+            }}
+          >
+            {song.title}
           </div>
-        </section>
-        
-        <section id="lyrics" style={{ position: 'relative', zIndex: 1, padding: '120px 40px', maxWidth: '800px', margin: '0 auto' }}>
-          <SectionHeader title="LYRICS" />
-          <div style={{ fontFamily: '"Bebas Neue"', fontSize: '32px', color: '#ff2d2d', marginBottom: '20px' }}>{ALL_LYRICS[currentTrack].title}</div>
-          {ALL_LYRICS[currentTrack].stanzas.map((s, i) => (
-            <div key={i} style={{ marginBottom: '40px' }}>
-              <span style={{ color: '#ff2d2d', fontSize: '12px', display: 'block', marginBottom: '10px' }}>{s.label}</span>
-              <div style={{ whiteSpace: 'pre-wrap', color: '#999', lineHeight: 2 }}>{s.text}</div>
+          <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#444', marginBottom: '32px' }}>
+            ULTRARABBIT
+          </div>
+        </div>
+
+        <div style={{ fontFamily: '"Space Mono", monospace', fontSize: '14px', color: '#999', lineHeight: 2.2, whiteSpace: 'pre-line' }}>
+          {song.stanzas.map((stanza, i) => (
+            <div key={i} style={{ marginBottom: i < song.stanzas.length - 1 ? '32px' : '0' }}>
+              <span style={{
+                fontFamily: '"Fira Code", monospace',
+                fontSize: '10px',
+                color: stanza.muted ? '#444' : '#ff2d2d',
+                letterSpacing: '0.2em',
+                display: 'block',
+                marginBottom: stanza.text ? '12px' : '0',
+              }}>
+                {stanza.label}
+              </span>
+              {stanza.text && stanza.text}
             </div>
           ))}
-        </section>
+        </div>
       </div>
-    </div>
+    </section>
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')).render(<UltraRabbitWebsite />);
+const Footer = () => {
+  return (
+    <footer
+      style={{
+        backgroundColor: '#000',
+        borderTop: '1px solid #111',
+        padding: '40px',
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', color: '#fff', letterSpacing: '0.2em', marginBottom: '16px' }}>
+        ULTRARABBIT
+      </div>
+      <div style={{ marginBottom: '16px' }}>
+        <img src="rabbit.gif" alt="ULTRARABBIT" style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '16px', alignItems: 'center' }}>
+        <a
+          href="https://instagram.com/ULTRARABBIT"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#666', transition: 'color 0.2s', display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', fontFamily: '"Fira Code", monospace', fontSize: '12px', letterSpacing: '0.1em' }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#ff2d2d')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#666')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+          </svg>
+          @ULTRARABBIT
+        </a>
+      </div>
+      <a
+        href="mailto:bounce@ultrarabbit.co.uk"
+        style={{
+          fontFamily: '"Fira Code", monospace',
+          fontSize: '12px',
+          color: '#666',
+          letterSpacing: '0.1em',
+          textDecoration: 'none',
+          display: 'inline-block',
+          marginBottom: '16px',
+          transition: 'color 0.2s',
+        }}
+        onMouseEnter={(e) => (e.target.style.color = '#ff2d2d')}
+        onMouseLeave={(e) => (e.target.style.color = '#666')}
+      >
+        bounce@ultrarabbit.co.uk
+      </a>
+      <div style={{ fontFamily: '"Fira Code", monospace', fontSize: '10px', color: '#333', letterSpacing: '0.1em' }}>
+        © 2026 ALL RIGHTS RESERVED • BUILT IN THE VOID
+      </div>
+    </footer>
+  );
+};
+
+
+
+function UltraRabbitWebsite() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(0);
+  const audioRef = useRef(null);
+
+  const scrollToSection = (id) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div style={{ backgroundColor: '#000', minHeight: '100vh' }}>
+      <BurgerMenu isOpen={menuOpen} setIsOpen={setMenuOpen} scrollToSection={scrollToSection} />
+      <AboutSection />
+      <GigsSection />
+      <div style={{ position: 'relative', backgroundColor: '#000' }}>
+        <RabbitVisualiser audioRef={audioRef} />
+        <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
+        <LyricsSection currentTrack={currentTrack} />
+      </div>
+      <MerchSection />
+      <Footer />
+    </div>
+  );
+}
+
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<UltraRabbitWebsite />);
   </script>
 </body>
 </html>
