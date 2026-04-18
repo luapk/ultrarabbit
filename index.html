@@ -801,9 +801,7 @@ const MerchSection = () => {
   );
 };
 
-const TRACK_MODELS = ['rabbit.glb', 'logo.glb', 'rabbit.glb'];
-
-const RabbitVisualiser = ({ audioRef, currentTrack }) => {
+const RabbitVisualiser = ({ audioRef }) => {
   const mountRef = useRef(null);
   const frameRef = useRef(null);
   const stateRef = useRef({});
@@ -872,7 +870,7 @@ const RabbitVisualiser = ({ audioRef, currentTrack }) => {
     renderer.domElement.style.display = 'block';
     mount.appendChild(renderer.domElement);
 
-    loadModel(TRACK_MODELS[0], scene, ({ outerGroup, baseScale, meshData }) => {
+    loadModel('rabbit.glb', scene, ({ outerGroup, baseScale, meshData }) => {
       stateRef.current.outerGroup = outerGroup;
       stateRef.current.baseScale = baseScale;
       stateRef.current.meshData = meshData;
@@ -966,24 +964,6 @@ const RabbitVisualiser = ({ audioRef, currentTrack }) => {
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
   }, []);
-
-  // Track change — swap model
-  useEffect(() => {
-    const { scene } = stateRef.current;
-    if (!scene) return;
-    if (stateRef.current.outerGroup) {
-      scene.remove(stateRef.current.outerGroup);
-      stateRef.current.outerGroup = null;
-      stateRef.current.baseScale = null;
-      stateRef.current.meshData = null;
-    }
-    const file = TRACK_MODELS[currentTrack] || TRACK_MODELS[0];
-    loadModel(file, scene, ({ outerGroup, baseScale, meshData }) => {
-      stateRef.current.outerGroup = outerGroup;
-      stateRef.current.baseScale = baseScale;
-      stateRef.current.meshData = meshData;
-    });
-  }, [currentTrack]);
 
   return (
     <div
@@ -1203,7 +1183,7 @@ function UltraRabbitWebsite() {
       <AboutSection />
       <GigsSection />
       <div style={{ position: 'relative', backgroundColor: '#000' }}>
-        <RabbitVisualiser audioRef={audioRef} currentTrack={currentTrack} />
+        <RabbitVisualiser audioRef={audioRef} />
         <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
         <LyricsSection currentTrack={currentTrack} />
       </div>
