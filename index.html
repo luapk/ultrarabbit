@@ -303,6 +303,7 @@ const BurgerMenu = ({ isOpen, setIsOpen, scrollToSection }) => {
     { name: 'GIGS', id: 'gigs' },
     { name: 'LISTEN', id: 'listen' },
     { name: 'LYRICS', id: 'lyrics' },
+    { name: 'PRESS', id: 'press' },
     { name: 'MERCH', id: 'merch', comingSoon: true },
   ];
 
@@ -742,6 +743,71 @@ const GigsSection = () => {
               </div>
             );
           })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const PressSection = () => {
+  return (
+    <section
+      id="press"
+      style={{
+        backgroundColor: '#0a0a0a',
+        padding: '120px 40px',
+      }}
+    >
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <SectionHeader title="PRESS" />
+        <div
+          style={{
+            borderLeft: '3px solid #ff2d2d',
+            paddingLeft: '40px',
+            marginTop: '60px',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: 'clamp(32px, 5vw, 56px)',
+              color: '#fff',
+              lineHeight: 1.15,
+              letterSpacing: '0.03em',
+              marginBottom: '32px',
+            }}
+          >
+            <span style={{ color: '#ff2d2d', marginRight: '8px' }}>"</span>
+            A gleefully eccentric electronic duo
+            <span style={{ color: '#ff2d2d', marginLeft: '8px' }}>"</span>
+          </div>
+          <a
+            href="https://louderthanwar.com/sigue-sigue-sputnik-electronic-229-great-portland-street-london-live-review/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: '"Fira Code", monospace',
+              fontSize: '13px',
+              color: '#ff2d2d',
+              textDecoration: 'none',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              display: 'block',
+              marginBottom: '8px',
+            }}
+          >
+            Louder Than War ↗
+          </a>
+          <div
+            style={{
+              fontFamily: '"Fira Code", monospace',
+              fontSize: '11px',
+              color: '#444',
+              letterSpacing: '0.08em',
+            }}
+          >
+            229 Venue, London — 25 July 2026 — Supporting Sigue Sigue Sputnik
+          </div>
         </div>
       </div>
     </section>
@@ -1226,6 +1292,7 @@ function UltraRabbitWebsite() {
         <ListenSection currentTrack={currentTrack} setCurrentTrack={setCurrentTrack} audioRef={audioRef} />
         <LyricsSection currentTrack={currentTrack} />
       </div>
+      <PressSection />
       <MerchSection />
       <Footer />
     </div>
