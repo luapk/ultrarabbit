@@ -77,6 +77,24 @@
   #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
   #gate .alt u:hover { color: var(--red); }
 
+  #sync {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 8; display: none;
+    width: min(760px, calc(100% - 32px)); background: #000; outline: 2px solid var(--red); padding: 16px 18px;
+    font-size: 11px; letter-spacing: .14em; color: #fff;
+  }
+  #sync.on { display: block; }
+  #sync .hd { color: var(--red); margin-bottom: 12px; }
+  #sync .prev, #sync .after { color: #666; font: 400 20px/1.1 "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; min-height: 22px; }
+  #sync .nxt { color: #fff; font: 400 44px/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .03em; margin: 6px 0; min-height: 44px; }
+  #sync .help { color: #aaa; margin: 12px 0; }
+  #sync .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #sync button {
+    font: 600 12px "Fira Code", monospace; letter-spacing: .1em; background: var(--red); color: #000;
+    border: 0; padding: 9px 12px; cursor: pointer;
+  }
+  #sync button.ghost { background: #000; color: #fff; outline: 1px solid #fff; }
+  #syMsg { color: var(--red); }
+
   @media (max-width: 640px) { #keys { display: none; } #trk { font-size: 11px; } }
 </style>
 </head>
@@ -102,7 +120,21 @@
     <div id="bar"><i></i></div>
     <button id="mic" class="ghost" aria-label="Use microphone">MIC</button>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–6 SCENE · M MIC · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–6 SCENE · M MIC · Y SYNC LYRICS · F FULLSCREEN · H HIDE HUD</div>
+  </div>
+</div>
+
+<div id="sync" aria-live="polite">
+  <div class="hd">SYNC MODE · <span id="syTrack"></span> · LINE <span id="syPos"></span></div>
+  <div class="prev" id="syPrev"></div>
+  <div class="nxt" id="syNext"></div>
+  <div class="after" id="syAfter"></div>
+  <div class="help">ENTER / TAP LINE = LINE STARTS NOW · BACKSPACE = UNDO · ←/→ = SEEK 5S · Y = EXIT</div>
+  <div class="row">
+    <button id="syTap">TAP LINE</button>
+    <button id="syCopy" class="ghost">COPY TIMINGS</button>
+    <button id="syClear" class="ghost">CLEAR THIS TRACK</button>
+    <span id="syMsg"></span>
   </div>
 </div>
 
@@ -139,6 +171,12 @@ const LINES = [
     'BUT YOU LIVE ALONE', 'THAT MUST HAVE BEEN THE TV', 'DID YOU MEAN TO RING ME AT ALL?', 'WAS IT ALL MUFFLED?',
   ],
 ];
+
+// Every sung line in order, per track (same order as TRACKS).
+const SONG_LINES = [["WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE", "WE'RE FIRST IN LINE", "OUR RIGHTFUL PLACE", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE COMING THROUGH", "WE'RE COMING FAST", "EAT OUR DUST", "WE'RE SCREAMING PAST", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS OUR TIME", "THIS IS OUR TIME", "WE'RE LEAVING YOU BEHIND NOW", "THIS IS OUR TIME"], ["WHEN PEOPLE SAY EASE BACK", "I SAY FUCK THAT", "THE NIGHT IS YOUNG", "COME ON", "LET'S HAVE FUN", "GIRLS AND BOYS", "TONIGHT IS MY OWN", "I DON'T WANNA GO HOME", "I'VE GOT A SHED TO BUILD", "AND A WIFE TO AVOID", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "THERE'S PLENTY OF TIME", "TILL THE LAST TRAIN", "COME ON EVERYBODY", "SAME AGAIN", "NO EXCUSES", "YOU CAN'T GO HOME", "LEAVING ME HERE DRINKING", "ON MY OWN", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "LYING IN BED", "WITH THE LAPTOP OPEN", "MOVING THE MOUSE", "SO IT LOOKS LIKE I'M WORKING", "MY HANGOVER'S SCREAMING", "'NEVER AGAIN!!!'", "FUCK THAT! TONIGHT", "I WANT MORE OF THE SAME", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY"], ["HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHAT DID YOU HEAR?", "WHAT DID I SAY?", "HOW LONG WERE YOU LISTENING", "ANYWAY?", "WAS IT ALL MUFFLED?", "WAS IT ALL CLEAR?", "WHAT DID YOU HEAR?", "WHAT DID YOU HEAR?", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHERE ARE YOU BABE?", "I THOUGHT YOU WERE AT HOME?", "I THOUGHT I HEARD VOICES", "BUT YOU LIVE ALONE", "ER… YEAH,", "THAT MUST HAVE BEEN THE TV", "I GUESS I POCKET CALLED", "ACCIDENTALLY, SORRY", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL"]];
+
+// Start time in seconds of each SONG_LINES entry, recorded with sync mode (Y). null = not synced yet.
+const BAKED_SYNC = [null, null, null];
 
 const HEX = { red: '#ff2d2d', black: '#000000', white: '#ffffff' };
 const $ = (id) => document.getElementById(id);
@@ -457,6 +495,7 @@ function playTrack(i) {
   audio.play().catch(() => {});
   mode = 'track';
   updateHud();
+  syncRender();
 }
 
 function togglePlay() {
@@ -500,8 +539,49 @@ audio.addEventListener('pause', updateHud);
 /* Giant lyric typography                                              */
 /* ------------------------------------------------------------------ */
 
-const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, beats: 0, punch: 0, rot: 0, offs: [] };
+const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
 let lastPhrase = '';
+
+const SYNC_KEY = 'burrow-sync-v1';
+let localSync = {};
+try { localSync = JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (e) { localSync = {}; }
+const timingsFor = (i) => localSync[i] || BAKED_SYNC[i];
+
+function saveLocalSync() {
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify(localSync)); } catch (e) { /* private mode: timings live for this visit only */ }
+}
+
+// The line being sung right now, if this track has timings and we're inside a line.
+function currentLine() {
+  if (mode !== 'track') return null;
+  const times = timingsFor(cur);
+  if (!times || !times.length) return null;
+  const ct = audio.currentTime;
+  let i = -1;
+  for (let k = 0; k < times.length && times[k] <= ct; k++) i = k;
+  if (i < 0) return null;
+  const text = SONG_LINES[cur][i], words = text.split(' ');
+  const next = i + 1 < times.length ? times[i + 1] : Infinity;
+  const end = Math.min(next, times[i] + 1.6 + words.length * .55);
+  if (ct >= end) return null;
+  return { i, start: times[i], end, text, words };
+}
+
+function syncText() {
+  const L = currentLine();
+  if (!L) { T.sync = -1; return; }
+  const wi = Math.min(L.words.length - 1, Math.floor((audio.currentTime - L.start) / (L.end - L.start) * L.words.length));
+  if (L.i !== T.sync) {
+    T.sync = L.i;
+    T.phrase = L.text; T.words = L.words; T.wi = wi;
+    renderText();
+    T.punch = 1; T.rot = rand(-3, 3);
+  } else if (T.mode === 'slam' && wi !== T.wi) {
+    T.wi = wi;
+    renderText();
+    T.punch = 1; T.rot = rand(-3, 3);
+  }
+}
 
 function nextPhrase() {
   const pool = mode === 'track' && Math.random() < .8 ? LINES[cur] : LINES.flat();
@@ -579,12 +659,23 @@ function textSetup(textMode, layer, color) {
   T.el = layer === 'back' ? back : front;
   T.el.style.setProperty('--tc', HEX[color]);
   T.beats = 0;
+  T.sync = -1;
   nextPhrase();
   renderText();
 }
 
 function textBeat() {
   T.beats++;
+  // While a synced line is on screen the words follow the vocal; beats only add hits.
+  if (T.sync >= 0) {
+    if (T.mode === 'block') {
+      const spans = [...T.el.children];
+      spans.forEach((sp) => sp.classList.remove('inv'));
+      if (spans.length > 1) pick(spans).classList.add('inv');
+    }
+    T.punch = Math.max(T.punch, .45);
+    return;
+  }
   if (T.mode === 'slam') {
     T.wi++;
     if (T.wi >= T.words.length) nextPhrase();
@@ -708,6 +799,78 @@ function feverUpdate() {
   drawCut();
   cutCanvas.classList.add('on');
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Sync mode: tap along to record when each line starts                */
+/* ------------------------------------------------------------------ */
+
+const SY = { on: false };
+const TAP_LATENCY = .12;
+
+function syncTimes() {
+  if (!localSync[cur]) localSync[cur] = [];
+  return localSync[cur];
+}
+
+function syncRender() {
+  if (!SY.on) return;
+  const lines = SONG_LINES[cur], n = syncTimes().length;
+  $('syTrack').textContent = TRACKS[cur].title;
+  $('syPos').textContent = `${Math.min(n + 1, lines.length)}/${lines.length}`;
+  $('syPrev').textContent = n > 0 ? lines[n - 1] : '';
+  $('syNext').textContent = n < lines.length ? lines[n] : 'DONE — COPY TIMINGS AND SEND THEM OVER';
+  $('syAfter').textContent = lines[n + 1] || '';
+}
+
+function syncToggle() {
+  SY.on = !SY.on;
+  $('sync').classList.toggle('on', SY.on);
+  $('syMsg').textContent = '';
+  if (!SY.on) return;
+  ensureCtx(); actx.resume();
+  if (mode !== 'track') playTrack(cur);
+  if (!syncTimes().length) { audio.currentTime = 0; audio.play().catch(() => {}); }
+  syncRender();
+}
+
+function syncTap() {
+  const arr = syncTimes();
+  const t = Math.max(0, audio.currentTime - TAP_LATENCY);
+  // Re-tapping after seeking back replaces everything from that point on.
+  while (arr.length && arr[arr.length - 1] >= t) arr.pop();
+  if (arr.length >= SONG_LINES[cur].length) return;
+  arr.push(Math.round(t * 100) / 100);
+  saveLocalSync();
+  syncRender();
+}
+
+function syncUndo() {
+  const arr = syncTimes();
+  arr.pop();
+  saveLocalSync();
+  audio.currentTime = Math.max(0, (arr.length ? arr[arr.length - 1] : 0) - .5);
+  syncRender();
+}
+
+function syncClear() {
+  localSync[cur] = [];
+  saveLocalSync();
+  audio.currentTime = 0;
+  syncRender();
+}
+
+async function syncCopy() {
+  const out = {};
+  TRACKS.forEach((tr, i) => { const t = timingsFor(i); if (t && t.length) out[tr.title] = t; });
+  const text = 'BURROW_SYNC ' + JSON.stringify(out);
+  try { await navigator.clipboard.writeText(text); $('syMsg').textContent = 'COPIED'; }
+  catch (e) { window.prompt('Copy these timings:', text); }
+}
+
+$('syTap').addEventListener('click', syncTap);
+$('syCopy').addEventListener('click', syncCopy);
+$('syClear').addEventListener('click', syncClear);
 
 /* ------------------------------------------------------------------ */
 /* Scenes                                                              */
@@ -939,6 +1102,15 @@ $('bar').addEventListener('click', (e) => {
 
 window.addEventListener('keydown', (e) => {
   const gateOpen = !$('gate').classList.contains('gone');
+  if (SY.on && !e.repeat) {
+    if (e.key === 'Enter') { e.preventDefault(); return syncTap(); }
+    if (e.key === 'Backspace') { e.preventDefault(); return syncUndo(); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      audio.currentTime = Math.max(0, audio.currentTime + (e.key === 'ArrowLeft' ? -5 : 5));
+      return;
+    }
+  }
+  if ((e.key === 'y' || e.key === 'Y') && !gateOpen) return syncToggle();
   if (e.code === 'Space') { e.preventDefault(); if (gateOpen) enter(false); else togglePlay(); }
   else if (e.key === 'ArrowRight') { ensureCtx(); actx.resume(); playTrack(cur + 1); }
   else if (e.key === 'ArrowLeft') { ensureCtx(); actx.resume(); playTrack(cur - 1); }
@@ -995,6 +1167,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), .05);
   t += dt;
   analyse(t, dt);
+  syncText();
 
   if (A.beat) {
     if (A.beatCount - sceneBeat >= S[sceneName].len) {
