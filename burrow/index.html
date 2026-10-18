@@ -131,10 +131,8 @@
     <button id="next" aria-label="Next track">▸▸</button>
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
-    <button id="mic" class="ghost" aria-label="Use microphone">MIC</button>
-    <button id="syOpen" class="ghost" aria-label="Sync lyrics">SYNC</button>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · M MIC · Y SYNC LYRICS · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
 
@@ -163,7 +161,6 @@
 <div id="gate">
   <img src="/logo.jpg" alt="ULTRARABBIT">
   <div class="go">[ CLICK TO ENTER ]</div>
-  <div class="alt">or <u id="gateMic">USE MIC</u> for live mode</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -800,7 +797,6 @@ function syncRender() {
 function syncToggle() {
   SY.on = !SY.on;
   $('sync').classList.toggle('on', SY.on);
-  $('syOpen').classList.toggle('on', SY.on);
   $('syMsg').textContent = '';
   if (!SY.on) return;
   ensureCtx(); actx.resume();
@@ -1080,7 +1076,6 @@ function updateHud() {
   $('play').textContent = playing ? '❚❚' : '▶';
   $('trk').textContent = mode === 'mic' ? 'LIVE INPUT' : TRACKS[cur].title;
   $('src').textContent = mode === 'mic' ? 'MIC' : playing ? 'PLAYING' : mode === 'track' ? 'PAUSED' : 'IDLE';
-  $('mic').classList.toggle('on', mode === 'mic');
 }
 
 function enter(useMic) {
@@ -1090,12 +1085,10 @@ function enter(useMic) {
   if (useMic) startMic(); else playTrack(cur);
 }
 
-$('gate').addEventListener('click', (e) => enter(e.target.id === 'gateMic'));
+$('gate').addEventListener('click', () => enter(false));
 $('play').addEventListener('click', () => { ensureCtx(); actx.resume(); togglePlay(); });
 $('prev').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur - 1); });
 $('next').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur + 1); });
-$('mic').addEventListener('click', () => (mode === 'mic' ? stopMic() : startMic()));
-$('syOpen').addEventListener('click', syncToggle);
 $('bar').addEventListener('click', (e) => {
   if (!audio.duration) return;
   const r = e.currentTarget.getBoundingClientRect();
