@@ -27,10 +27,7 @@
   }
   .txt .ln { display: block; padding: 0 .04em; will-change: transform; }
   .txt .ln.inv { background: var(--tc); color: var(--bg); }
-  .txt .ln.out { color: transparent; -webkit-text-stroke: var(--sw, 3px) var(--tc); }
   .txt .ln.hl { background: var(--hlbg); color: #fff; -webkit-text-stroke: 0; padding: .03em .14em 0; margin: .03em 0; }
-  .txt .row { display: block; width: 100%; overflow: visible; }
-  .txt .row span { display: inline-block; will-change: transform; }
 
   #grain {
     opacity: .09; mix-blend-mode: normal;
@@ -136,7 +133,7 @@
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–8 SCENE · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
 
@@ -560,7 +557,7 @@ audio.addEventListener('pause', updateHud);
 /* Giant lyric typography                                              */
 /* ------------------------------------------------------------------ */
 
-const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, hl: false, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
+const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, hl: false, beats: 0, punch: 0, rot: 0, sync: -1 };
 
 const SYNC_KEY = 'burrow-sync-v1';
 let localSync = {};
@@ -670,19 +667,6 @@ function renderText() {
       const k = H * .92 / total;
       spans.forEach((s, i) => (s.style.fontSize = sizes[i] * k + 'px'));
     }
-  } else if (T.mode === 'marquee') {
-    T.offs = [];
-    const fs = H / 3.1;
-    for (let r = 0; r < 3; r++) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const s = lineEl((T.phrase + ' ✕ ').repeat(8), r === 1 ? '' : 'out');
-      s.style.fontSize = fs + 'px';
-      s.style.setProperty('--sw', Math.max(2, fs / 60) + 'px');
-      row.append(s);
-      el.append(row);
-      T.offs.push(-rand(0, W));
-    }
   }
 }
 
@@ -705,8 +689,6 @@ function textBeat() {
     const spans = [...T.el.children];
     spans.forEach((sp) => sp.classList.remove('inv'));
     if (spans.length > 1) pick(spans).classList.add('inv');
-  } else if (T.mode === 'marquee') {
-    [...T.el.querySelectorAll('.ln')].forEach((sp, i) => sp.classList.toggle('out', (i + T.beats) % 2 === 0));
   }
   T.punch = Math.max(T.punch, .45);
 }
@@ -717,16 +699,6 @@ function textUpdate(dt) {
   if (T.hl) {
     front.style.setProperty('--hlbg', bgName === 'red' ? HEX.black : HEX.red);
     front.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .08})`;
-  } else if (T.mode === 'marquee') {
-    const speed = 90 + A.level * 700 + A.kick * 500;
-    [...T.el.querySelectorAll('.ln')].forEach((s, i) => {
-      const half = s.getBoundingClientRect().width / 2;
-      T.offs[i] += (i % 2 ? 1 : -1) * speed * dt;
-      if (T.offs[i] < -half) T.offs[i] += half;
-      if (T.offs[i] > 0) T.offs[i] -= half;
-      s.style.transform = `translateX(${T.offs[i]}px)`;
-    });
-    T.el.style.transform = `translateX(${shake}px)`;
   } else {
     T.el.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .12}) rotate(${T.rot * T.punch}deg)`;
   }
@@ -1245,32 +1217,6 @@ S.ARMY = {
   },
 };
 
-S.SHATTER = {
-  len: 16,
-  setup() {
-    setCam(35, [0, 0, 6]);
-    setBg('white');
-    const m = masks[0];
-    m.visible = true;
-    palette(m, 'black', 'red', 'red', 'black', 'white');
-    const { aspect } = view(), h = visH(6);
-    this.s = Math.min(.9 * h / MASK.h, .7 * h * aspect / MASK.w);
-    this.ex = 0; this.target = 0; this.ry = 0;
-  },
-  text: ['marquee', 'back', 'black'],
-  update(t, dt) {
-    const m = masks[0];
-    if (A.beat) this.target = A.beatCount % 8 === 0 ? 2.6 : Math.max(this.target, A.strength * .55);
-    this.target *= Math.exp(-dt * 2.6);
-    this.ex += (this.target - this.ex) * Math.min(1, dt * 16);
-    this.ry += dt * (.35 + A.mid);
-    m.material.uniforms.uExplode.value = this.ex;
-    m.rotation.set(Math.sin(t * .4) * .15, Math.sin(this.ry) * .7, 0);
-    m.scale.setScalar(this.s);
-    m.position.y = 0;
-  },
-};
-
 S.TUNNEL = {
   len: 24,
   setup() {
@@ -1389,87 +1335,106 @@ S.BAND = {
 
 const totemCv = $('totem'), totemCtx = totemCv.getContext('2d');
 
-// 32 beats: the hero totem (with mirrored side totems) traces on one module per beat, comes
-// alive for 8 beats, then hands over to columns of totems that tick on the beat.
-S.TOTEMS = {
-  len: 32,
-  setup() {
-    setCam(35, [0, 0, 6]);
-    setBg('black');
-    totemCv.classList.add('on');
-    const { aspect } = view();
-    this.beats = 0;
-    this.hero = makeTotem(); hideTotem(this.hero);
-    this.flank = aspect > .8 ? makeTotem() : null;
-    if (this.flank) hideTotem(this.flank);
-    this.cols = null;
-    this.nCols = aspect > 1.3 ? 5 : aspect > .8 ? 4 : 3;
+// Five short totem sequences, 8 beats each. They share the beat bookkeeping in totemScene().
+function totemScene(def) {
+  return Object.assign({
+    len: 8,
+    text: ['none', 'front', 'white'],
+    setup() {
+      setCam(35, [0, 0, 6]);
+      setBg('black');
+      totemCv.classList.add('on');
+      this.beats = 0;
+      this.init(view());
+    },
+    update(time, dt) {
+      const { W, H } = view();
+      totemCtx.clearRect(0, 0, W, H);
+      TOT.look += (TOT.lookT - TOT.look) * Math.min(1, dt * 14);
+      if (A.beat) {
+        this.beats++;
+        TOT.lookT = pick([-1, -1, 0, 1, 1]);
+        this.onBeat(W, H);
+      }
+      this.draw(totemCtx, W, H, dt, beatPhase());
+    },
+  }, def);
+}
+
+// Centre totem flanked by a smaller mirrored pair (dropped on narrow screens).
+function heroInit(self, aspect) {
+  self.hero = makeTotem();
+  self.flank = aspect > .8 ? makeTotem() : null;
+  self.group = [self.hero, ...(self.flank ? [self.flank] : [])];
+}
+
+function heroDraw(self, g, W, H, dt, ph, scan) {
+  stepTotems(self.group, dt);
+  const bar = ((self.beats % 4) + ph) / 4;
+  const h = totemH(self.hero), sc = Math.min(W * .34, H * .88 / h);
+  drawTotem(g, self.hero, (W - sc) / 2, (H - h * sc) / 2, sc, { scan: scan ? bar : -1 });
+  if (!self.flank) return;
+  const fh = totemH(self.flank), fs = Math.min(W * .17, H * .6 / fh);
+  for (const side of [-1, 1]) {
+    g.save();
+    g.translate(W / 2 + side * W * .3, 0);
+    g.scale(side, 1);
+    drawTotem(g, self.flank, -fs / 2, (H - fh * fs) / 2, fs, { scan: scan ? (bar + .5) % 1 : -1 });
+    g.restore();
+  }
+}
+
+// Draws itself on: one module of each totem per beat.
+S.TOTEM_TRACE = totemScene({
+  init({ aspect }) {
+    heroInit(this, aspect);
+    this.group.forEach((tt) => hideTotem(tt));
   },
-  text: ['none', 'front', 'white'],
-  startColumns() {
-    this.cols = Array.from({ length: this.nCols }, (_, i) => {
+  onBeat() {
+    for (const [tt, order] of [[this.hero, 1], [this.flank, -1]]) {
+      if (!tt) continue;
+      const next = (order > 0 ? tt : [...tt].reverse()).find((m) => m.draw < 0);
+      if (next) { next.go = true; next.draw = 0; next.pop = 1; }
+    }
+    kickTotem(this.hero, A.strength * .6);
+  },
+  draw(g, W, H, dt, ph) { heroDraw(this, g, W, H, dt, ph, this.hero.every((m) => m.draw >= 1)); },
+});
+
+// Fully built and kicking: springs, swaps, red echoes and the scan line.
+S.TOTEM_ALIVE = totemScene({
+  init({ aspect }) {
+    heroInit(this, aspect);
+    this.group.forEach((tt, i) => hideTotem(tt, i * .1));
+  },
+  onBeat() {
+    this.group.forEach((tt, i) => kickTotem(tt, A.strength, i * .06));
+    hitTotem(this.beats % 2 && this.flank ? this.flank : this.hero);
+  },
+  draw(g, W, H, dt, ph) { heroDraw(this, g, W, H, dt, ph, true); },
+});
+
+// Columns of totems that step up/down one notch per beat.
+S.TOTEM_COLUMNS = totemScene({
+  init({ aspect }) {
+    this.n = aspect > 1.3 ? 5 : aspect > .8 ? 4 : 3;
+    this.cols = Array.from({ length: this.n }, (_, i) => {
       const totems = [makeTotem(), makeTotem(), makeTotem()];
-      totems.forEach((tt, j) => hideTotem(tt, (Math.abs(i - (this.nCols - 1) / 2)) * .25 + j * .15));
+      totems.forEach((tt, j) => hideTotem(tt, Math.abs(i - (this.n - 1) / 2) * .2 + j * .12));
       const off = rand(0, 1500);
       return { totems, off, target: off, dir: i % 2 ? 1 : -1 };
     });
   },
-  update(time, dt) {
-    const { W, H } = view();
-    const g = totemCtx;
-    g.clearRect(0, 0, W, H);
-    TOT.look += (TOT.lookT - TOT.look) * Math.min(1, dt * 14);
-    const ph = beatPhase();
-    const heroes = [this.hero, ...(this.flank ? [this.flank] : [])];
-
-    if (A.beat) {
-      this.beats++;
-      TOT.lookT = pick([-1, -1, 0, 1, 1]);
-      if (this.beats <= 8) {
-        const next = this.hero.find((m) => m.draw < 0);
-        if (next) { next.go = true; next.draw = 0; }
-        if (this.flank) {
-          const fl = [...this.flank].reverse().find((m) => m.draw < 0);
-          if (fl) { fl.go = true; fl.draw = 0; }
-        }
-      }
-      if (this.beats === 8) heroes.forEach((tt) => tt.forEach((m) => { m.go = true; m.draw = Math.max(m.draw, 0); }));
-      if (this.beats > 8 && this.beats <= 16) {
-        heroes.forEach((tt, i) => kickTotem(tt, A.strength, i * .06));
-        if (this.beats % 2 === 0) hitTotem(this.hero);
-        if (this.flank && this.beats % 2 === 1) hitTotem(this.flank);
-      } else if (this.beats <= 8) kickTotem(this.hero, A.strength * .6);
-      if (this.beats === 16) this.startColumns();
-      if (this.cols) {
-        const sc = W / this.nCols * .6;
-        for (const c of this.cols) {
-          c.target += c.dir * sc * (A.strength > .85 ? 1.1 : .55);
-          c.totems.forEach((tt, j) => kickTotem(tt, A.strength, j * .02));
-          if (Math.random() < .5) hitTotem(pick(c.totems));
-        }
-      }
+  onBeat(W) {
+    const sc = W / this.n * .6;
+    for (const c of this.cols) {
+      c.target += c.dir * sc * (A.strength > .85 ? 1.1 : .55);
+      c.totems.forEach((tt, j) => kickTotem(tt, A.strength, j * .02));
+      if (Math.random() < .5) hitTotem(pick(c.totems));
     }
-
-    if (!this.cols) {
-      stepTotems(heroes, dt);
-      const bar = ((this.beats % 4) + ph) / 4;
-      const h = totemH(this.hero), sc = Math.min(W * .34, H * .88 / h);
-      drawTotem(g, this.hero, (W - sc) / 2, (H - h * sc) / 2, sc, { scan: this.beats > 8 ? bar : -1 });
-      if (this.flank) {
-        const fh = totemH(this.flank), fs = Math.min(W * .17, H * .6 / fh);
-        for (const side of [-1, 1]) {
-          g.save();
-          g.translate(W / 2 + side * W * .3, 0);
-          g.scale(side, 1);
-          drawTotem(g, this.flank, -fs / 2, (H - fh * fs) / 2, fs, { scan: this.beats > 8 ? (bar + .5) % 1 : -1 });
-          g.restore();
-        }
-      }
-      return;
-    }
-
-    const cw = W / this.nCols, sc = cw * .6;
-    const bar = ((this.beats % 4) + ph) / 4;
+  },
+  draw(g, W, H, dt, ph) {
+    const cw = W / this.n, sc = cw * .6, bar = ((this.beats % 4) + ph) / 4;
     this.cols.forEach((c, i) => {
       stepTotems(c.totems, dt);
       c.off += (c.target - c.off) * Math.min(1, dt * 16);
@@ -1484,11 +1449,71 @@ S.TOTEMS = {
       }
     });
   },
-};
+});
 
-const ORDER = ['FACE', 'ARMY', 'SHATTER', 'TUNNEL', 'ORBIT', 'STROBE', 'BAND', 'TOTEMS'];
-// Totems come up twice as often as the other scenes.
-const ROTATION = [...ORDER.filter((n) => n !== 'BAND'), 'TOTEMS'];
+// A lineup across the screen: kicks travel left to right, one totem turns red per beat.
+S.TOTEM_ROW = totemScene({
+  init({ aspect }) {
+    const n = aspect > 1.3 ? 7 : aspect > .8 ? 5 : 3;
+    this.row = Array.from({ length: n }, () => makeTotem());
+    this.row.forEach((tt, i) => hideTotem(tt, Math.abs(i - (n - 1) / 2) * .12));
+    this.red = -1;
+  },
+  onBeat() {
+    this.row.forEach((tt, i) => kickTotem(tt, A.strength, i * .045));
+    if (this.red >= 0) this.row[this.red].forEach((m) => (m.inv = false));
+    this.red = (this.beats - 1) % this.row.length;
+    this.row[this.red].forEach((m) => (m.inv = true));
+    if (this.beats % 2 === 0) hitTotem(pick(this.row));
+  },
+  draw(g, W, H, dt, ph) {
+    stepTotems(this.row, dt);
+    const n = this.row.length, cw = W / n, base = H * .9;
+    const sc = Math.min(cw * .7, ...this.row.map((tt) => H * .78 / totemH(tt)));
+    this.row.forEach((tt, i) => {
+      const h = totemH(tt) * sc;
+      drawTotem(g, tt, cw * i + (cw - sc) / 2, base - h, sc, { scan: ((this.beats + ph) / 2 + i / n) % 1 });
+    });
+  },
+});
+
+// One huge totem; the view drops one module per beat and snaps there.
+S.TOTEM_DIVE = totemScene({
+  init({ W, H }) {
+    this.tt = makeTotem();
+    hideTotem(this.tt, 0);
+    this.sc = Math.min(W * .9, H * 1.1);
+    this.focus = 0;
+    this.y = this.focusY();
+  },
+  focusY() {
+    let y = 0;
+    for (let i = 0; i < this.focus; i++) y += MODS[this.tt[i].k].h + TOT_GAP;
+    return (y + MODS[this.tt[this.focus].k].h / 2) * this.sc;
+  },
+  onBeat() {
+    this.focus = (this.focus + 1) % this.tt.length;
+    kickTotem(this.tt, A.strength);
+    const m = this.tt[this.focus];
+    if (Math.random() < .5) m.flip = 1; else m.inv = !m.inv;
+  },
+  draw(g, W, H, dt, ph) {
+    stepTotems([this.tt], dt);
+    this.y += (this.focusY() - this.y) * Math.min(1, dt * 12);
+    const z = 1 + A.kick * .04;
+    g.save();
+    g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-W / 2, -H / 2);
+    drawTotem(g, this.tt, (W - this.sc) / 2, H / 2 - this.y, this.sc, { scan: ph });
+    g.restore();
+  },
+});
+
+const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE'];
+const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_ROW', 'TOTEM_DIVE'];
+const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES];
+// Number keys: 1-5 mask scenes, 6 band clip, 7 steps through the totem sequences.
+const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM'];
+const isTotem = (n) => n.startsWith('TOTEM_');
 
 function nextScene() {
   let n;
@@ -1504,13 +1529,13 @@ function setScene(name, keepText = false) {
   sceneName = name;
   sceneBeat = A.beatCount;
   if (name !== 'BAND') { bandVid.classList.remove('on'); bandVid.pause(); }
-  if (name !== 'TOTEMS') totemCv.classList.remove('on');
+  if (!isTotem(name)) totemCv.classList.remove('on');
   resetMasks();
   if (!keepText) textSetup(...S[name].text);
   S[name].setup();
   if (keepText) renderText();
   if (!keepText) fever(rand(6, 10));
-  $('scn').textContent = `SCENE ${ORDER.indexOf(name) + 1}/${ORDER.length} · ${name}`;
+  $('scn').textContent = `SCENE · ${name.replace('_', ' ')}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1555,7 +1580,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); if (gateOpen) enter(false); else togglePlay(); }
   else if (e.key === 'ArrowRight') { ensureCtx(); actx.resume(); playTrack(cur + 1); }
   else if (e.key === 'ArrowLeft') { ensureCtx(); actx.resume(); playTrack(cur - 1); }
-  else if (e.key >= '1' && e.key <= String(ORDER.length)) setScene(ORDER[+e.key - 1]);
+  else if (e.key >= '1' && e.key <= String(KEYS.length)) {
+    const k = KEYS[+e.key - 1];
+    setScene(k === 'TOTEM' ? TOTEM_SCENES[(TOTEM_SCENES.indexOf(sceneName) + 1) % TOTEM_SCENES.length] : k);
+  }
   else if (e.key === 'm' || e.key === 'M') { if (gateOpen) enter(true); else if (mode === 'mic') stopMic(); else startMic(); }
   else if (e.key === 'f' || e.key === 'F') {
     if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.();
@@ -1618,7 +1646,7 @@ function frame() {
     } else {
       textBeat();
       if (A.beatCount % 32 === 0) fever(rand(10, 16));
-      else if (sceneName !== 'TOTEMS' && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
+      else if (!isTotem(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
       else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
     }
   }
