@@ -177,25 +177,11 @@ const TRACKS = [
   { title: 'POCKET CALL', src: '/PocketCall.mp3' },
 ];
 
-const LINES = [
-  [
-    "WE'RE IN YOUR FACE", 'EAT OUR DUST', "WE'RE SCREAMING PAST", "YOU CAN'T HOLD US BACK",
-    'THE WORLD IS OURS', 'THE ULTRARABBIT ALWAYS WINS', "WE'RE COMING THROUGH", 'THIS IS WHO WE ARE NOW',
-  ],
-  [
-    'I SAY FUCK THAT', 'FUCK THAT! TONIGHT I WANT MORE', 'THE NIGHT IS YOUNG', "I DON'T WANNA GO HOME",
-    'A SHED TO BUILD AND A WIFE TO AVOID', 'THE WORST THAT CAN HAPPEN IS A WRITTEN WARNING',
-    "NEXT ROUND'S ON ME", "MY HANGOVER'S SCREAMING", 'NEVER AGAIN!!!', 'ANY WAY!',
-    'LEAVING ME HERE DRINKING ON MY OWN', 'SAME AGAIN',
-  ],
-  [
-    'WHAT DID YOU HEAR?', 'IT WAS A POCKET CALL', 'HOW LONG WERE YOU LISTENING?', 'I THOUGHT I HEARD VOICES',
-    'BUT YOU LIVE ALONE', 'THAT MUST HAVE BEEN THE TV', 'DID YOU MEAN TO RING ME AT ALL?', 'WAS IT ALL MUFFLED?',
-  ],
-];
-
 // Every sung line in order, per track (same order as TRACKS).
 const SONG_LINES = [["WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE", "WE'RE FIRST IN LINE", "OUR RIGHTFUL PLACE", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE COMING THROUGH", "WE'RE COMING FAST", "EAT OUR DUST", "WE'RE SCREAMING PAST", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS OUR TIME", "THIS IS OUR TIME", "WE'RE LEAVING YOU BEHIND NOW", "THIS IS OUR TIME"], ["WHEN PEOPLE SAY EASE BACK", "I SAY FUCK THAT", "THE NIGHT IS YOUNG", "COME ON", "LET'S HAVE FUN", "GIRLS AND BOYS", "TONIGHT IS MY OWN", "I DON'T WANNA GO HOME", "I'VE GOT A SHED TO BUILD", "AND A WIFE TO AVOID", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "THERE'S PLENTY OF TIME", "TILL THE LAST TRAIN", "COME ON EVERYBODY", "SAME AGAIN", "NO EXCUSES", "YOU CAN'T GO HOME", "LEAVING ME HERE DRINKING", "ON MY OWN", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "LYING IN BED", "WITH THE LAPTOP OPEN", "MOVING THE MOUSE", "SO IT LOOKS LIKE I'M WORKING", "MY HANGOVER'S SCREAMING", "'NEVER AGAIN!!!'", "FUCK THAT! TONIGHT", "I WANT MORE OF THE SAME", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY"], ["HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHAT DID YOU HEAR?", "WHAT DID I SAY?", "HOW LONG WERE YOU LISTENING", "ANYWAY?", "WAS IT ALL MUFFLED?", "WAS IT ALL CLEAR?", "WHAT DID YOU HEAR?", "WHAT DID YOU HEAR?", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHERE ARE YOU BABE?", "I THOUGHT YOU WERE AT HOME?", "I THOUGHT I HEARD VOICES", "BUT YOU LIVE ALONE", "ER… YEAH,", "THAT MUST HAVE BEEN THE TV", "I GUESS I POCKET CALLED", "ACCIDENTALLY, SORRY", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL"]];
+
+// Index of the last line of each verse / chorus; these hold on screen until the next line.
+const STANZA_ENDS = [[11, 23, 35, 55], [9, 17, 25, 33, 41, 48], [7, 15, 23, 31, 39]];
 
 // Start time in seconds of each SONG_LINES entry, recorded with sync mode (Y). null = not synced yet.
 const BAKED_SYNC = [
@@ -565,19 +551,18 @@ audio.addEventListener('pause', updateHud);
 /* Giant lyric typography                                              */
 /* ------------------------------------------------------------------ */
 
-const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
-let lastPhrase = '';
+const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
 
 const SYNC_KEY = 'burrow-sync-v1';
 let localSync = {};
 try { localSync = JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (e) { localSync = {}; }
-const timingsFor = (i) => localSync[i] || BAKED_SYNC[i];
+const timingsFor = (i) => (localSync[i] && localSync[i].length ? localSync[i] : BAKED_SYNC[i]);
 
 function saveLocalSync() {
   try { localStorage.setItem(SYNC_KEY, JSON.stringify(localSync)); } catch (e) { /* private mode: timings live for this visit only */ }
 }
 
-// The line being sung right now, if this track has timings and we're inside a line.
+// The line being sung right now. Lyrics only ever come from timings: no timings, no text.
 function currentLine() {
   if (mode !== 'track') return null;
   const times = timingsFor(cur);
@@ -588,35 +573,31 @@ function currentLine() {
   if (i < 0) return null;
   const text = SONG_LINES[cur][i], words = text.split(' ');
   const next = i + 1 < times.length ? times[i + 1] : Infinity;
-  const end = Math.min(next, times[i] + 1.6 + words.length * .55);
-  if (ct >= end) return null;
-  return { i, start: times[i], end, text, words };
+  const paced = Math.min(next, times[i] + 1.6 + words.length * .55);
+  const last = STANZA_ENDS[cur].includes(i);
+  if (!last && ct >= paced) return null;
+  return { i, start: times[i], paced, last, text, words };
 }
 
 function syncText() {
   const L = currentLine();
-  if (!L) { T.sync = -1; return; }
-  const wi = Math.min(L.words.length - 1, Math.floor((audio.currentTime - L.start) / (L.end - L.start) * L.words.length));
+  if (!L) {
+    if (T.sync >= 0) { T.sync = -1; T.phrase = ''; renderText(); }
+    return;
+  }
+  const ct = audio.currentTime;
+  const wi = Math.min(L.words.length - 1, Math.floor((ct - L.start) / (L.paced - L.start) * L.words.length));
+  const full = L.last && ct >= L.paced;
   if (L.i !== T.sync) {
     T.sync = L.i;
-    T.phrase = L.text; T.words = L.words; T.wi = wi;
+    T.phrase = L.text; T.words = L.words; T.wi = wi; T.full = full;
     renderText();
     T.punch = 1; T.rot = rand(-3, 3);
-  } else if (T.mode === 'slam' && wi !== T.wi) {
-    T.wi = wi;
+  } else if (T.mode === 'slam' && (wi !== T.wi || full !== T.full)) {
+    T.wi = wi; T.full = full;
     renderText();
-    T.punch = 1; T.rot = rand(-3, 3);
+    T.punch = 1; T.rot = full ? 0 : rand(-3, 3);
   }
-}
-
-function nextPhrase() {
-  const pool = mode === 'track' && Math.random() < .8 ? LINES[cur] : LINES.flat();
-  let p;
-  do { p = pick(pool); } while (p === lastPhrase);
-  lastPhrase = p;
-  T.phrase = p;
-  T.words = p.split(' ');
-  T.wi = 0;
 }
 
 function wrapLines(phrase, max) {
@@ -649,12 +630,12 @@ function renderText() {
   const el = T.el;
   el.replaceChildren();
   el.style.transform = '';
-  if (T.mode === 'none') return;
-  if (T.mode === 'slam') {
+  if (T.mode === 'none' || !T.phrase) return;
+  if (T.mode === 'slam' && !T.full) {
     const s = lineEl(T.words[T.wi]);
     el.append(s);
     fitSpan(s, W * .94, H * .72);
-  } else if (T.mode === 'block') {
+  } else if (T.mode === 'block' || T.mode === 'slam') {
     const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
     const spans = lines.map((l) => lineEl(l));
     el.append(...spans);
@@ -687,41 +668,21 @@ function textSetup(textMode, layer, color) {
   T.el.style.setProperty('--tc', HEX[color]);
   T.beats = 0;
   T.sync = -1;
-  nextPhrase();
-  renderText();
+  T.phrase = '';
 }
 
+// The words follow the vocal; beats only add hits to whatever line is up.
 function textBeat() {
   T.beats++;
-  // While a synced line is on screen the words follow the vocal; beats only add hits.
-  if (T.sync >= 0) {
-    if (T.mode === 'block') {
-      const spans = [...T.el.children];
-      spans.forEach((sp) => sp.classList.remove('inv'));
-      if (spans.length > 1) pick(spans).classList.add('inv');
-    }
-    T.punch = Math.max(T.punch, .45);
-    return;
-  }
-  if (T.mode === 'slam') {
-    T.wi++;
-    if (T.wi >= T.words.length) nextPhrase();
-    renderText();
-    T.punch = 1;
-    T.rot = rand(-3, 3);
-  } else if (T.mode === 'block') {
-    if (T.beats % 8 === 0) { nextPhrase(); renderText(); T.punch = 1; } else {
-      const spans = [...T.el.children];
-      spans.forEach((s) => s.classList.remove('inv'));
-      if (spans.length) pick(spans).classList.add('inv');
-      T.punch = .5;
-    }
-    T.rot = 0;
+  if (T.sync < 0) return;
+  if (T.mode === 'block' || (T.mode === 'slam' && T.full)) {
+    const spans = [...T.el.children];
+    spans.forEach((sp) => sp.classList.remove('inv'));
+    if (spans.length > 1) pick(spans).classList.add('inv');
   } else if (T.mode === 'marquee') {
-    if (T.beats % 16 === 0) { nextPhrase(); renderText(); }
-    const rows = [...T.el.querySelectorAll('.ln')];
-    rows.forEach((s, i) => s.classList.toggle('out', (i + T.beats) % 2 === 0));
+    [...T.el.querySelectorAll('.ln')].forEach((sp, i) => sp.classList.toggle('out', (i + T.beats) % 2 === 0));
   }
+  T.punch = Math.max(T.punch, .45);
 }
 
 function textUpdate(dt) {
