@@ -37,6 +37,8 @@
   }
   #scan { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
   #flash { background: #fff; opacity: 0; }
+  #cut { width: 100%; height: 100%; display: block; visibility: hidden; }
+  #cut.on { visibility: visible; }
 
   #hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .4s; z-index: 5; }
   body.idle #hud, body.nohud #hud { opacity: 0; }
@@ -69,9 +71,7 @@
     transition: opacity .5s;
   }
   #gate.gone { opacity: 0; pointer-events: none; }
-  #gate h1 {
-    font: 400 clamp(64px, 17vw, 260px)/.8 "Bebas Neue", Impact, sans-serif; color: var(--red); letter-spacing: .02em;
-  }
+  #gate img { height: min(58vh, 120vw); width: auto; display: block; }
   #gate .go { font-size: 13px; letter-spacing: .3em; color: #000; background: #fff; padding: 12px 18px; }
   #gate .alt { font-size: 11px; letter-spacing: .2em; color: #fff; }
   #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
@@ -85,6 +85,7 @@
   <div id="back" class="layer txt"></div>
   <canvas id="gl"></canvas>
   <div id="front" class="layer txt"></div>
+  <canvas id="cut" class="layer"></canvas>
   <div id="grain" class="layer"></div>
   <div id="scan" class="layer"></div>
   <div id="flash" class="layer"></div>
@@ -106,7 +107,7 @@
 </div>
 
 <div id="gate">
-  <h1>ULTRARABBIT</h1>
+  <img src="/logo.jpg" alt="ULTRARABBIT">
   <div class="go">[ CLICK TO ENTER ]</div>
   <div class="alt">or <u id="gateMic">USE MIC</u> for live mode</div>
 </div>
@@ -623,6 +624,91 @@ function textUpdate(dt) {
   }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Logo fever cuts                                                     */
+/* ------------------------------------------------------------------ */
+
+// The logo is three flat colours (black ground, white line-work, red goggles). Split it into those
+// regions once, then rebuild it with every permutation of the palette for the inverted cuts.
+const VARIANTS = [
+  ['black', 'white', 'red'], ['white', 'black', 'red'], ['red', 'black', 'white'],
+  ['red', 'white', 'black'], ['black', 'red', 'white'], ['white', 'red', 'black'],
+];
+const logos = [];
+const cutCanvas = $('cut'), cutCtx = cutCanvas.getContext('2d');
+const F = { cuts: 0, frames: 0, v: 0, fill: false, jx: 0, jy: 0, z: 1 };
+
+(() => {
+  const img = new Image();
+  img.onload = () => {
+    const h = Math.min(1400, img.naturalHeight), w = Math.round(img.naturalWidth * h / img.naturalHeight);
+    const src = document.createElement('canvas');
+    src.width = w; src.height = h;
+    const g = src.getContext('2d');
+    g.drawImage(img, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    const cls = new Uint8Array(w * h);
+    for (let i = 0; i < cls.length; i++) {
+      const r = px[i * 4], gg = px[i * 4 + 1], b = px[i * 4 + 2];
+      cls[i] = r > 140 && gg < 110 && b < 110 ? 2 : (r + gg + b) / 3 > 128 ? 1 : 0;
+    }
+    for (const v of VARIANTS) {
+      const rgb = v.map((n) => new THREE.Color(HEX[n]).toArray().map((c) => Math.round(c * 255)));
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const cg = c.getContext('2d'), out = cg.createImageData(w, h);
+      for (let i = 0; i < cls.length; i++) {
+        const k = rgb[cls[i]];
+        out.data[i * 4] = k[0]; out.data[i * 4 + 1] = k[1]; out.data[i * 4 + 2] = k[2]; out.data[i * 4 + 3] = 255;
+      }
+      cg.putImageData(out, 0, 0);
+      logos.push({ canvas: c, bg: HEX[v[0]] });
+    }
+  };
+  img.src = '/logo.jpg';
+})();
+
+function fever(n) {
+  if (!logos.length) { flash = 1; return; }
+  F.cuts = Math.max(F.cuts, Math.round(n));
+  F.frames = 0;
+}
+
+function drawCut() {
+  const { W, H } = view();
+  const L = logos[F.v];
+  cutCtx.fillStyle = L.bg;
+  cutCtx.fillRect(0, 0, W, H);
+  const c = L.canvas;
+  // Either the whole logo, or a slammed-in crop that overfills the frame.
+  const k = F.fill ? Math.max(W / c.width, H / c.height) * F.z : Math.min(W / c.width, H / c.height) * .86 * F.z;
+  const dw = c.width * k, dh = c.height * k;
+  cutCtx.drawImage(c, (W - dw) / 2 + F.jx * W, (H - dh) / 2 + F.jy * H, dw, dh);
+}
+
+function feverUpdate() {
+  if (F.frames > 0) { F.frames--; return; }
+  if (F.cuts <= 0) { cutCanvas.classList.remove('on'); return; }
+  F.cuts--;
+  // Every other cut drops back to the live scene so the logo stutters against it.
+  if (cutCanvas.classList.contains('on') && Math.random() < .45) {
+    cutCanvas.classList.remove('on');
+    F.frames = 1 + (Math.random() * 2 | 0);
+    return;
+  }
+  let v;
+  do { v = Math.random() * logos.length | 0; } while (v === F.v);
+  F.v = v;
+  F.fill = Math.random() < .35;
+  F.z = F.fill ? rand(1, 1.8) : rand(.8, 1.15);
+  F.jx = F.fill ? rand(-.25, .25) : rand(-.03, .03);
+  F.jy = F.fill ? rand(-.3, .3) : rand(-.03, .03);
+  F.frames = 1 + (Math.random() * 3 | 0);
+  drawCut();
+  cutCanvas.classList.add('on');
+}
+
 /* ------------------------------------------------------------------ */
 /* Scenes                                                              */
 /* ------------------------------------------------------------------ */
@@ -708,7 +794,6 @@ S.SHATTER = {
     this.ex += (this.target - this.ex) * Math.min(1, dt * 16);
     this.ry += dt * (.35 + A.mid);
     m.material.uniforms.uExplode.value = this.ex;
-    m.material.uniforms.uEdge.value = Math.min(1, this.ex * 3);
     m.rotation.set(Math.sin(t * .4) * .15, Math.sin(this.ry) * .7, 0);
     m.scale.setScalar(this.s);
     m.position.y = 0;
@@ -818,7 +903,7 @@ function setScene(name, keepText = false) {
   if (!keepText) textSetup(...S[name].text);
   S[name].setup();
   if (keepText) renderText();
-  if (!keepText) flash = 1;
+  if (!keepText) fever(rand(6, 10));
   $('scn').textContent = `SCENE ${ORDER.indexOf(name) + 1}/${ORDER.length} · ${name}`;
 }
 
@@ -889,6 +974,9 @@ window.addEventListener('mousemove', (e) => {
 function resize() {
   const { W, H } = view();
   renderer.setSize(W, H, false);
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  cutCanvas.width = W * dpr; cutCanvas.height = H * dpr;
+  cutCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   setScene(sceneName, true);
@@ -913,8 +1001,13 @@ function frame() {
       let n;
       do { n = pick(ORDER); } while (n === sceneName);
       setScene(n);
-    } else textBeat();
+    } else {
+      textBeat();
+      if (A.beatCount % 32 === 0) fever(rand(10, 16));
+      else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
+    }
   }
+  feverUpdate();
 
   S[sceneName].update(t, dt);
   textUpdate(dt);
