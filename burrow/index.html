@@ -37,8 +37,10 @@
   }
   #scan { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
   #flash { background: #fff; opacity: 0; }
-  #cut { width: 100%; height: 100%; display: block; visibility: hidden; }
+  #cut { position: fixed; inset: 0; z-index: 7; width: 100%; height: 100%; display: block; visibility: hidden; pointer-events: none; }
   #cut.on { visibility: visible; }
+  #band { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; display: none; background: #000; }
+  #band.on { display: block; }
 
   #hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .4s; z-index: 5; }
   body.idle #hud, body.nohud #hud { opacity: 0; }
@@ -103,7 +105,7 @@
   <div id="back" class="layer txt"></div>
   <canvas id="gl"></canvas>
   <div id="front" class="layer txt"></div>
-  <canvas id="cut" class="layer"></canvas>
+  <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted loop playsinline preload="auto"></video>
   <div id="grain" class="layer"></div>
   <div id="scan" class="layer"></div>
   <div id="flash" class="layer"></div>
@@ -120,9 +122,11 @@
     <div id="bar"><i></i></div>
     <button id="mic" class="ghost" aria-label="Use microphone">MIC</button>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–6 SCENE · M MIC · Y SYNC LYRICS · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · M MIC · Y SYNC LYRICS · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
+
+<canvas id="cut"></canvas>
 
 <div id="sync" aria-live="polite">
   <div class="hd">SYNC MODE · <span id="syTrack"></span> · LINE <span id="syPos"></span></div>
@@ -623,6 +627,7 @@ function renderText() {
   const el = T.el;
   el.replaceChildren();
   el.style.transform = '';
+  if (T.mode === 'none') return;
   if (T.mode === 'slam') {
     const s = lineEl(T.words[T.wi]);
     el.append(s);
@@ -721,14 +726,11 @@ function textUpdate(dt) {
 /* ------------------------------------------------------------------ */
 
 // The logo is three flat colours (black ground, white line-work, red goggles). Split it into those
-// regions once, then rebuild it with every permutation of the palette for the inverted cuts.
-const VARIANTS = [
-  ['black', 'white', 'red'], ['white', 'black', 'red'], ['red', 'black', 'white'],
-  ['red', 'white', 'black'], ['black', 'red', 'white'], ['white', 'red', 'black'],
-];
+// regions once, then rebuild it in its two colourways: on black, and on red with black goggles.
+const VARIANTS = [['black', 'white', 'red'], ['red', 'white', 'black']];
 const logos = [];
 const cutCanvas = $('cut'), cutCtx = cutCanvas.getContext('2d');
-const F = { cuts: 0, frames: 0, v: 0, fill: false, jx: 0, jy: 0, z: 1 };
+const F = { cuts: 0, frames: 0, v: 0, z: 1, solid: false };
 
 (() => {
   const img = new Image();
@@ -771,35 +773,24 @@ function drawCut() {
   const L = logos[F.v];
   cutCtx.fillStyle = L.bg;
   cutCtx.fillRect(0, 0, W, H);
-  const c = L.canvas;
-  // Either the whole logo, or a slammed-in crop that overfills the frame.
-  const k = F.fill ? Math.max(W / c.width, H / c.height) * F.z : Math.min(W / c.width, H / c.height) * .86 * F.z;
-  const dw = c.width * k, dh = c.height * k;
-  cutCtx.drawImage(c, (W - dw) / 2 + F.jx * W, (H - dh) / 2 + F.jy * H, dw, dh);
+  if (F.solid) return;
+  const c = L.canvas, k = Math.min(W / c.width, H / c.height) * .86 * F.z;
+  cutCtx.drawImage(c, (W - c.width * k) / 2, (H - c.height * k) / 2, c.width * k, c.height * k);
 }
 
+// A logo sequence owns the whole screen: it flips between the two colourways and their bare
+// background colours, and only hands back to the scene when the burst is over.
 function feverUpdate() {
   if (F.frames > 0) { F.frames--; return; }
   if (F.cuts <= 0) { cutCanvas.classList.remove('on'); return; }
   F.cuts--;
-  // Every other cut drops back to the live scene so the logo stutters against it.
-  if (cutCanvas.classList.contains('on') && Math.random() < .45) {
-    cutCanvas.classList.remove('on');
-    F.frames = 1 + (Math.random() * 2 | 0);
-    return;
-  }
-  let v;
-  do { v = Math.random() * logos.length | 0; } while (v === F.v);
-  F.v = v;
-  F.fill = Math.random() < .35;
-  F.z = F.fill ? rand(1, 1.8) : rand(.8, 1.15);
-  F.jx = F.fill ? rand(-.25, .25) : rand(-.03, .03);
-  F.jy = F.fill ? rand(-.3, .3) : rand(-.03, .03);
+  F.v = 1 - F.v;
+  F.solid = Math.random() < .3;
+  F.z = rand(.88, 1.04);
   F.frames = 1 + (Math.random() * 3 | 0);
   drawCut();
   cutCanvas.classList.add('on');
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Sync mode: tap along to record when each line starts                */
@@ -1056,12 +1047,32 @@ S.STROBE = {
   },
 };
 
-const ORDER = ['FACE', 'ARMY', 'SHATTER', 'TUNNEL', 'ORBIT', 'STROBE'];
-let sceneName = 'FACE', sceneBeat = 0, flash = 0;
+const bandVid = $('band');
+
+// Full-screen band animation, dropped in sparingly between scenes.
+S.BAND = {
+  len: 8,
+  setup() {
+    setCam(35, [0, 0, 6]);
+    setBg('black');
+    bandVid.classList.add('on');
+    bandVid.currentTime = 0;
+    bandVid.play().catch(() => {});
+  },
+  text: ['none', 'front', 'white'],
+  update() {
+    bandVid.style.transform = `scale(${1 + A.kick * .035})`;
+  },
+};
+
+const ORDER = ['FACE', 'ARMY', 'SHATTER', 'TUNNEL', 'ORBIT', 'STROBE', 'BAND'];
+const ROTATION = ORDER.filter((n) => n !== 'BAND');
+let sceneName = 'FACE', sceneBeat = 0, flash = 0, sceneCuts = 0;
 
 function setScene(name, keepText = false) {
   sceneName = name;
   sceneBeat = A.beatCount;
+  if (name !== 'BAND') { bandVid.classList.remove('on'); bandVid.pause(); }
   resetMasks();
   if (!keepText) textSetup(...S[name].text);
   S[name].setup();
@@ -1172,7 +1183,9 @@ function frame() {
   if (A.beat) {
     if (A.beatCount - sceneBeat >= S[sceneName].len) {
       let n;
-      do { n = pick(ORDER); } while (n === sceneName);
+      sceneCuts++;
+      if (sceneCuts % 3 === 0 && sceneName !== 'BAND') n = 'BAND';
+      else do { n = pick(ROTATION); } while (n === sceneName);
       setScene(n);
     } else {
       textBeat();
