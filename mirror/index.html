@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ULTRARABBIT // MIRROR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --red: #ff2d2d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden; color: #fff; }
+  body { font-family: "Fira Code", ui-monospace, monospace; -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #000; }
+  #cam { display: none; }
+  .tag {
+    position: fixed; top: max(16px, env(safe-area-inset-top)); font-size: 11px; letter-spacing: .18em;
+    background: #000; padding: 6px 8px; z-index: 2;
+  }
+  #tl { left: 16px; }
+  #tr { right: 16px; text-align: right; }
+  #tl b { font-weight: 600; }
+  #trk { position: fixed; left: 16px; bottom: max(16px, env(safe-area-inset-bottom)); font-size: 11px; letter-spacing: .18em; background: #000; padding: 6px 8px; z-index: 2; }
+  #gate {
+    position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 22px; background: #000; cursor: pointer; text-align: center; padding: 16px;
+    transition: opacity .5s;
+  }
+  #gate.gone { opacity: 0; pointer-events: none; }
+  #gate img { height: min(52vh, 110vw); width: auto; display: block; }
+  #gate .go { font-size: 13px; letter-spacing: .3em; color: #000; background: #fff; padding: 12px 18px; }
+  #gate .note { font-size: 11px; letter-spacing: .14em; color: #aaa; max-width: 360px; line-height: 1.6; }
+  #gate .err { color: var(--red); }
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted></video>
+<canvas id="c"></canvas>
+<div id="tl" class="tag"><b>ULTRARABBIT</b> // MIRROR</div>
+<div id="tr" class="tag">LOADING</div>
+<div id="trk">WORKING FROM HOME</div>
+
+<div id="gate">
+  <img src="/logo.jpg" alt="ULTRARABBIT">
+  <div class="go">[ TAP TO START ]</div>
+  <div class="note" id="note">Uses your front camera. Nothing is recorded or uploaded; the face tracking runs on your device.</div>
+</div>
+
+<script src="/totems.js"></script>
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
+
+const $ = (id) => document.getElementById(id);
+const RED = '#ff2d2d', WHITE = '#ffffff', BLACK = '#000000';
+const rand = (a, b) => a + Math.random() * (b - a);
+const lerp = (a, b, k) => a + (b - a) * k;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+
+const canvas = $('c'), g = canvas.getContext('2d'), cam = $('cam');
+let W = 0, H = 0;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ------------------------------------------------------------------ */
+/* Face tracking                                                       */
+/* ------------------------------------------------------------------ */
+
+let landmarker = null;
+const ready = (async () => {
+  const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm');
+  const make = (delegate) => FaceLandmarker.createFromOptions(files, {
+    baseOptions: { modelAssetPath: '/models/face_landmarker.task', delegate },
+    runningMode: 'VIDEO',
+    numFaces: 1,
+  });
+  landmarker = await make('GPU').catch(() => make('CPU'));
+})();
+
+// Landmark indices (MediaPipe face mesh): eye corners, irises, forehead, cheeks, lips.
+const LM = { eyeA: [33, 133], eyeB: [362, 263], irisA: 468, irisB: 473, forehead: 10, chin: 152, cheekA: 234, cheekB: 454, lipTop: 13, lipBot: 14 };
+
+// Smoothed face frame: centre between the eyes, roll, scale (face width in px), and the feature
+// points in face units (x along the eye line, y down, 1 = face width).
+const face = { found: false, seen: 0, cx: 0, cy: 0, roll: 0, s: 1, pts: null };
+
+function videoRect() {
+  const vw = cam.videoWidth || 640, vh = cam.videoHeight || 480, k = Math.max(W / vw, H / vh);
+  return { dw: vw * k, dh: vh * k, ox: (W - vw * k) / 2, oy: (H - vh * k) / 2 };
+}
+
+function track(now) {
+  if (!landmarker || cam.readyState < 2) return;
+  const res = landmarker.detectForVideo(cam, now);
+  const lm = res.faceLandmarks && res.faceLandmarks[0];
+  // Ride out brief tracking dropouts so the overlay doesn't flicker.
+  if (!lm) { if (now - face.seen > 400) face.found = false; return; }
+  const r = videoRect();
+  // Mirror x so the overlay matches the selfie view.
+  const P = (i) => [W - (r.ox + lm[i].x * r.dw), r.oy + lm[i].y * r.dh];
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  let eA = mid(P(LM.eyeA[0]), P(LM.eyeA[1])), eB = mid(P(LM.eyeB[0]), P(LM.eyeB[1]));
+  let iA = P(LM.irisA), iB = P(LM.irisB);
+  if (eA[0] > eB[0]) { [eA, eB] = [eB, eA]; [iA, iB] = [iB, iA]; }
+  const c = mid(eA, eB);
+  const roll = Math.atan2(eB[1] - eA[1], eB[0] - eA[0]);
+  const ca = P(LM.cheekA), cb = P(LM.cheekB);
+  const s = Math.hypot(cb[0] - ca[0], cb[1] - ca[1]);
+  const local = ([x, y]) => {
+    const dx = x - c[0], dy = y - c[1], co = Math.cos(-roll), si = Math.sin(-roll);
+    return [(dx * co - dy * si) / s, (dx * si + dy * co) / s];
+  };
+  const pts = {
+    eyeL: local(eA), eyeR: local(eB), irisL: local(iA), irisR: local(iB),
+    forehead: local(P(LM.forehead)), chin: local(P(LM.chin)),
+    lipTop: local(P(LM.lipTop)), lipBot: local(P(LM.lipBot)),
+  };
+  const k = face.found ? .45 : 1;
+  face.cx = lerp(face.cx, c[0], k); face.cy = lerp(face.cy, c[1], k);
+  face.roll = lerp(face.roll, roll, k); face.s = lerp(face.s, s, k);
+  if (!face.pts || !face.found) face.pts = pts;
+  else for (const key in pts) face.pts[key] = [lerp(face.pts[key][0], pts[key][0], k), lerp(face.pts[key][1], pts[key][1], k)];
+  face.found = true;
+  face.seen = now;
+}
+
+/* ------------------------------------------------------------------ */
+/* Audio + beat detection                                              */
+/* ------------------------------------------------------------------ */
+
+const audio = new Audio('/WorkingFromHome.mp3');
+audio.loop = true;
+audio.preload = 'auto';
+let actx = null, analyser = null, data = null;
+const A = { bass: 0, beat: false, strength: 0, kick: 0, beatCount: 0, lastBeat: -10, bpm: 0 };
+const hist = [], ibis = [];
+
+function startAudio() {
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = actx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = .55;
+  data = new Uint8Array(analyser.frequencyBinCount);
+  const src = actx.createMediaElementSource(audio);
+  src.connect(analyser);
+  src.connect(actx.destination);
+  actx.resume();
+  return audio.play();
+}
+
+function analyse(t, dt) {
+  A.beat = false;
+  if (analyser && !audio.paused) {
+    analyser.getByteFrequencyData(data);
+    let b = 0;
+    for (let i = 1; i < 6; i++) b += data[i];
+    A.bass = b / 5 / 255;
+    hist.push(A.bass);
+    if (hist.length > 45) hist.shift();
+    const mean = hist.reduce((s, x) => s + x, 0) / hist.length;
+    const sd = Math.sqrt(hist.reduce((s, x) => s + (x - mean) ** 2, 0) / hist.length);
+    if (A.bass > mean + Math.max(.05, sd * 1.15) && A.bass > .25 && t - A.lastBeat > .27) {
+      A.beat = true;
+      A.strength = Math.min(1, Math.max(.35, (A.bass - mean) * 5));
+    }
+  } else if (t - A.lastBeat > .5) { A.beat = true; A.strength = .6; }
+  if (A.beat) {
+    const ibi = t - A.lastBeat;
+    if (ibi > .27 && ibi < 1.2) { ibis.push(ibi); if (ibis.length > 24) ibis.shift(); }
+    if (ibis.length > 6) { const s = [...ibis].sort((a, b) => a - b); A.bpm = Math.round(60 / s[s.length >> 1]); }
+    A.lastBeat = t;
+    A.beatCount++;
+  }
+  A.kick = Math.max(A.kick * Math.exp(-dt * 7), A.beat ? A.strength : 0);
+}
+const beatPhase = (t) => Math.min(1, (t - A.lastBeat) / (A.bpm ? 60 / A.bpm : .5));
+
+/* ------------------------------------------------------------------ */
+/* Sequence (runs on the song clock, so it restarts when the song loops) */
+/* ------------------------------------------------------------------ */
+
+const SEQ = { orbitEnd: 14, convergeEnd: 18, goggles: 18, ears: 19.3, mouth: 20.6, trace: 1.4 };
+
+// Ring of totem modules that orbit the face before it resolves.
+const ORBIT_KEYS = ['ARROWS', 'EYE', 'VENT', 'CHEVRON', 'DIAMOND', 'GOGGLES', 'DOME', 'MOUTH', 'VISOR', 'EARS'];
+const orbit = { mods: [], angle: 0, target: 0 };
+function resetOrbit() {
+  orbit.mods = ORBIT_KEYS.map((k, i) => ({ ...newMod(k), draw: -1, go: false, idx: i }));
+  orbit.angle = orbit.target = -Math.PI / 2;
+}
+resetOrbit();
+
+// Springs for the resolved features.
+const feat = { sp: 0, sv: 0, kickAt: -1 };
+let lastSongTime = 0;
+
+function stepSprings(dt, t) {
+  for (const m of orbit.mods) {
+    if (m.kickAt >= 0 && t >= m.kickAt) { m.sv += m.kickStr * 5.5; m.kickAt = -1; }
+    m.sv += (-150 * m.sp - 12 * m.sv) * dt; m.sp += m.sv * dt;
+    m.flip *= Math.exp(-dt * 14);
+    if (m.go && m.draw < 1) m.draw = Math.min(1, m.draw + dt * 2.4);
+  }
+  if (feat.kickAt >= 0 && t >= feat.kickAt) { feat.sv += A.strength * 5.5; feat.kickAt = -1; }
+  feat.sv += (-150 * feat.sp - 12 * feat.sv) * dt; feat.sp += feat.sv * dt;
+}
+
+function onBeat(t, song) {
+  if (song < SEQ.convergeEnd) {
+    const next = orbit.mods.find((m) => m.draw < 0);
+    if (next) { next.go = true; next.draw = 0; }
+    orbit.target += Math.PI * 2 / 16 * (A.strength > .85 ? 2 : 1);
+    orbit.mods.forEach((m, i) => { m.kickAt = t + i * .03; m.kickStr = A.strength; });
+    if (Math.random() < .4) totemPick(orbit.mods).flip = 1;
+  }
+  feat.kickAt = t;
+}
+
+/* ------------------------------------------------------------------ */
+/* Drawing                                                             */
+/* ------------------------------------------------------------------ */
+
+// Trace-on: strokes draw along their length as d goes 0 -> 1; fills arrive late in the trace.
+function traced(d, fn) {
+  if (d <= 0) return;
+  g.save();
+  if (d < 1) g.setLineDash([d * 9, 9]);
+  if (d < .65) g.fill = () => {};
+  fn();
+  delete g.fill;
+  g.restore();
+}
+
+function drawOrbit(t, song, ph) {
+  const conv = clamp((song - SEQ.orbitEnd) / (SEQ.convergeEnd - SEQ.orbitEnd), 0, 1);
+  if (conv >= 1) return;
+  orbit.angle += (orbit.target - orbit.angle) * .18 + conv * .25;
+  const rx = .78 * (1 - eOut(conv) * .9), ry = .98 * (1 - eOut(conv) * .9), size = .42 * (1 - conv * .85);
+  const n = orbit.mods.length;
+  orbit.mods.forEach((m, i) => {
+    if (m.draw <= 0) return;
+    const a = orbit.angle + i * Math.PI * 2 / n;
+    const e = clamp(m.sp * 2.2, 0, 1), z = size * (1 + e * .12);
+    const M = MODS[m.k];
+    g.save();
+    g.translate(Math.cos(a) * rx, .22 + Math.sin(a) * ry + Math.sin(t * 2 + i) * .02);
+    g.scale(z * Math.cos(m.flip * Math.PI), z);
+    g.translate(-.5, -M.h / 2);
+    g.lineWidth = TOT_LW; g.lineJoin = 'miter'; g.lineCap = 'butt';
+    if (m.draw < 1) g.setLineDash([m.draw * 5, 5]);
+    if (m.draw < .6) g.fill = () => {};
+    const inv = (A.beatCount + i) % 7 === 0;
+    M.draw(g, { c: inv ? RED : WHITE, a: inv ? WHITE : RED, t, ph, e, look: Math.sin(t * 1.3), beat: A.beatCount, full: m.draw >= 1 });
+    delete g.fill;
+    g.restore();
+  });
+}
+
+function drawGoggles(P, d, c, a, t, e) {
+  const xl = P.eyeL[0], xr = P.eyeR[0], gap = xr - xl, r = clamp(gap * .4, .12, .2);
+  const x0 = xl - r - .14, x1 = xr + r + .14, y0 = -r - .07, y1 = r + .08, ch = .07;
+  traced(d, () => {
+    g.lineWidth = .045; g.strokeStyle = c;
+    g.beginPath();
+    [[x0 + ch, y0], [x1 - ch, y0], [x1, y0 + ch], [x1, y1 - ch], [x1 - ch, y1], [x0 + ch, y1], [x0, y1 - ch], [x0, y0 + ch]]
+      .forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath(); g.stroke();
+    g.lineWidth = .022;
+    for (const [sx, dir] of [[x0, 1], [x1, -1]]) {
+      for (let k = 0; k < 3; k++) {
+        g.strokeStyle = k === A.beatCount % 3 ? a : c;
+        const x = sx + dir * (.03 + k * .025);
+        g.beginPath(); g.moveTo(x, y0 + ch + .02); g.lineTo(x, y1 - ch - .02); g.stroke();
+      }
+    }
+    g.strokeStyle = c; g.lineWidth = .025;
+    const w1 = .07 + Math.sin(t * 4) * .02, w2 = .05 + Math.cos(t * 4) * .015;
+    g.beginPath(); g.moveTo(-w1, y0 + .05); g.lineTo(w1, y0 + .05); g.stroke();
+    g.beginPath(); g.moveTo(-w2, y0 + .09); g.lineTo(w2, y0 + .09); g.stroke();
+    g.beginPath(); g.moveTo(-.06, y1 - .02); g.lineTo(0, y1 - .07); g.lineTo(.06, y1 - .02); g.stroke();
+    for (const [ex, ix, iy, dir] of [[xl, P.irisL[0], P.irisL[1], 1], [xr, P.irisR[0], P.irisR[1], -1]]) {
+      g.fillStyle = BLACK;
+      g.beginPath(); g.arc(ex, 0, r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = a; g.lineWidth = .05;
+      g.beginPath(); g.arc(ex, 0, r, 0, Math.PI * 2); g.stroke();
+      if (d >= 1) {
+        g.save(); g.setLineDash([.03, .025]); g.lineDashOffset = t * .25 * dir;
+        g.strokeStyle = c; g.lineWidth = .014;
+        g.beginPath(); g.arc(ex, 0, r + .045, 0, Math.PI * 2); g.stroke();
+        g.restore();
+      }
+      g.fillStyle = c;
+      const px = ex + clamp((ix - ex) * 2.2, -r * .55, r * .55), py = clamp(iy * 2.2, -r * .55, r * .55);
+      g.beginPath(); g.arc(px, py, r * .3 * (1 + e * .4), 0, Math.PI * 2); g.fill();
+    }
+  });
+}
+
+const EAR_PTS = [[.1, .9], [.1, .06], [.45, .4], [.45, .9]];
+function drawEars(P, d, c, a, t, e, ox = 0) {
+  const fy = P.forehead[1], size = 1.15;
+  traced(d, () => {
+    g.save();
+    g.translate(ox, 0);
+    g.lineWidth = .05; g.strokeStyle = c;
+    g.beginPath(); g.arc(0, fy + .5, .5, Math.PI + .55, -.55); g.stroke();
+    for (const side of [-1, 1]) {
+      g.save();
+      g.scale(side, 1);
+      g.translate(-size / 2, fy - size * .83);
+      g.scale(size, size);
+      g.translate(.27, .9); g.rotate(-(e * .22 + Math.sin(t * 2.2) * .025)); g.translate(-.27, -.9);
+      g.lineWidth = .05 / size; g.strokeStyle = c;
+      g.beginPath(); EAR_PTS.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.stroke();
+      g.restore();
+    }
+    for (let k = 0; k < 2; k++) {
+      const y = fy - .32 + k * .1 - eOut(beatPhase(t)) * .02;
+      g.fillStyle = (k + A.beatCount) % 2 ? a : c;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(-.07, y + .075); g.lineTo(.07, y + .075); g.closePath(); g.fill();
+    }
+    g.restore();
+  });
+}
+
+function drawMouth(P, d, c, a, t, e) {
+  const mx = (P.lipTop[0] + P.lipBot[0]) / 2, my = (P.lipTop[1] + P.lipBot[1]) / 2;
+  const open = clamp((P.lipBot[1] - P.lipTop[1]) * 1.6, 0, .25), R = .3, hr = .19;
+  traced(d, () => {
+    g.strokeStyle = c; g.lineWidth = .028;
+    g.beginPath(); g.arc(mx, my, R, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = c;
+    g.beginPath(); g.arc(mx, my - .07 - open / 2, hr, Math.PI, 0); g.closePath(); g.fill();
+    g.beginPath(); g.arc(mx, my + .07 + open / 2, hr, 0, Math.PI); g.closePath(); g.fill();
+    g.fillStyle = BLACK;
+    g.fillRect(mx - .46, my - .055, .92, .11);
+    if (d >= .65) {
+      g.save();
+      g.translate(mx, my + .005); g.scale(.001, .001);
+      g.fillStyle = c;
+      g.font = '600 100px "Fira Code", monospace';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('ULTRARABBIT', 0, 0);
+      g.restore();
+    }
+  });
+}
+
+function drawFace(t, song, ph) {
+  const P = face.pts;
+  const prog = (start) => clamp((song - start) / SEQ.trace, 0, 1);
+  const e = clamp(feat.sp * 2.2, 0, 1);
+  const inv = song > SEQ.mouth + SEQ.trace && A.beatCount % 16 === 0;
+  const c = inv ? RED : WHITE, a = inv ? WHITE : RED;
+  if (e > .3 && prog(SEQ.ears) >= 1) drawEars(P, 1, RED, RED, t, e, e * .05);
+  drawEars(P, prog(SEQ.ears), c, a, t, e);
+  drawGoggles(P, prog(SEQ.goggles), c, a, t, e);
+  drawMouth(P, prog(SEQ.mouth), c, a, t, e);
+}
+
+/* ------------------------------------------------------------------ */
+/* Loop                                                                */
+/* ------------------------------------------------------------------ */
+
+let t = 0, last = performance.now(), running = false;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - last) / 1000, .05);
+  last = now;
+  t += dt;
+  if (!running) return;
+
+  const song = audio.currentTime;
+  if (song < lastSongTime - 1) resetOrbit();
+  lastSongTime = song;
+
+  track(now);
+  analyse(t, dt);
+  if (A.beat) onBeat(t, song);
+  // Quiet intros still fill the ring: at least one module traces on every 1.1s of song.
+  if (orbit.mods.filter((m) => m.draw >= 0).length < Math.min(orbit.mods.length, song / 1.1)) {
+    const next = orbit.mods.find((m) => m.draw < 0);
+    if (next) { next.go = true; next.draw = 0; }
+  }
+  stepSprings(dt, t);
+  const ph = beatPhase(t);
+
+  g.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  g.fillStyle = BLACK;
+  g.fillRect(0, 0, W, H);
+  if (cam.readyState >= 2) {
+    const r = videoRect();
+    g.save();
+    g.translate(W, 0); g.scale(-1, 1);
+    g.drawImage(cam, r.ox, r.oy, r.dw, r.dh);
+    g.restore();
+    // Black and white, knocked back so the white line-work pops (blend modes work in every browser).
+    g.globalCompositeOperation = 'saturation';
+    g.fillStyle = BLACK; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'multiply';
+    g.fillStyle = '#b4b4b4'; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  // Without a face the orbit hovers mid-screen so there is still something to see.
+  const found = face.found && face.pts;
+  const s = found ? face.s : Math.min(W, H) * .45;
+  g.save();
+  if (found) { g.translate(face.cx, face.cy); g.rotate(face.roll); } else g.translate(W / 2, H * .45);
+  g.scale(s, s);
+  g.lineJoin = 'miter'; g.lineCap = 'butt';
+  drawOrbit(t, song, ph);
+  if (found && song >= SEQ.goggles) drawFace(t, song, ph);
+  g.restore();
+
+  $('tr').textContent = !landmarker ? 'LOADING' : found ? (A.bpm ? `BPM ~${A.bpm}` : 'LOCKED') : 'SHOW YOUR FACE';
+}
+requestAnimationFrame(frame);
+
+$('gate').addEventListener('click', async () => {
+  $('note').textContent = 'Starting…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    cam.srcObject = stream;
+    await cam.play();
+  } catch (e) {
+    $('note').textContent = 'Camera blocked. Allow camera access for this site and tap again.';
+    $('note').classList.add('err');
+    return;
+  }
+  startAudio().catch(() => {});
+  $('gate').classList.add('gone');
+  running = true;
+  await ready;
+});
+</script>
+</body>
+</html>
