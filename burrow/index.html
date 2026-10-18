@@ -96,6 +96,17 @@
   }
   #sync button.ghost { background: #000; color: #fff; outline: 1px solid #fff; }
   #syMsg { color: var(--red); }
+  #sync button.tap {
+    display: block; width: 100%; padding: 18px 12px; margin-bottom: 10px; font-size: 16px; letter-spacing: .2em;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #sync button.tap:active { background: #fff; }
+  @media (max-width: 640px) {
+    #sync { bottom: 12px; padding: 12px; }
+    #sync .help { display: none; }
+    #sync .nxt { font-size: 34px; min-height: 34px; }
+    #sync button.tap { padding: 26px 12px; font-size: 18px; }
+  }
 
   @media (max-width: 640px) { #keys { display: none; } #trk { font-size: 11px; } }
 </style>
@@ -121,6 +132,7 @@
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
     <button id="mic" class="ghost" aria-label="Use microphone">MIC</button>
+    <button id="syOpen" class="ghost" aria-label="Sync lyrics">SYNC</button>
     <div class="brk"></div>
     <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · M MIC · Y SYNC LYRICS · F FULLSCREEN · H HIDE HUD</div>
   </div>
@@ -133,11 +145,17 @@
   <div class="prev" id="syPrev"></div>
   <div class="nxt" id="syNext"></div>
   <div class="after" id="syAfter"></div>
-  <div class="help">ENTER / TAP LINE = LINE STARTS NOW · BACKSPACE = UNDO · ←/→ = SEEK 5S · Y = EXIT</div>
+  <div class="help">TAP LINE (OR ENTER) THE MOMENT EACH LINE STARTS · BACKSPACE = UNDO · ←/→ = SEEK 5S · Y = EXIT</div>
+  <button id="syTap" class="tap">TAP LINE</button>
   <div class="row">
-    <button id="syTap">TAP LINE</button>
+    <button id="syPrevT" class="ghost" aria-label="Previous track">◂◂ TRACK</button>
+    <button id="syNextT" class="ghost" aria-label="Next track">TRACK ▸▸</button>
+    <button id="syUndo" class="ghost">UNDO</button>
+    <button id="syBack" class="ghost">−5S</button>
+    <button id="syFwd" class="ghost">+5S</button>
     <button id="syCopy" class="ghost">COPY TIMINGS</button>
-    <button id="syClear" class="ghost">CLEAR THIS TRACK</button>
+    <button id="syClear" class="ghost">CLEAR TRACK</button>
+    <button id="syExit" class="ghost">EXIT</button>
     <span id="syMsg"></span>
   </div>
 </div>
@@ -817,6 +835,7 @@ function syncRender() {
 function syncToggle() {
   SY.on = !SY.on;
   $('sync').classList.toggle('on', SY.on);
+  $('syOpen').classList.toggle('on', SY.on);
   $('syMsg').textContent = '';
   if (!SY.on) return;
   ensureCtx(); actx.resume();
@@ -840,7 +859,7 @@ function syncUndo() {
   const arr = syncTimes();
   arr.pop();
   saveLocalSync();
-  audio.currentTime = Math.max(0, (arr.length ? arr[arr.length - 1] : 0) - .5);
+  audio.currentTime = arr.length ? arr[arr.length - 1] + .05 : 0;
   syncRender();
 }
 
@@ -859,7 +878,13 @@ async function syncCopy() {
   catch (e) { window.prompt('Copy these timings:', text); }
 }
 
-$('syTap').addEventListener('click', syncTap);
+$('syTap').addEventListener('pointerdown', (e) => { e.preventDefault(); syncTap(); });
+$('syUndo').addEventListener('click', syncUndo);
+$('syPrevT').addEventListener('click', () => { playTrack(cur - 1); if (!syncTimes().length) audio.currentTime = 0; });
+$('syNextT').addEventListener('click', () => { playTrack(cur + 1); if (!syncTimes().length) audio.currentTime = 0; });
+$('syBack').addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 5); });
+$('syFwd').addEventListener('click', () => { audio.currentTime += 5; });
+$('syExit').addEventListener('click', syncToggle);
 $('syCopy').addEventListener('click', syncCopy);
 $('syClear').addEventListener('click', syncClear);
 
@@ -1105,6 +1130,7 @@ $('play').addEventListener('click', () => { ensureCtx(); actx.resume(); togglePl
 $('prev').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur - 1); });
 $('next').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur + 1); });
 $('mic').addEventListener('click', () => (mode === 'mic' ? stopMic() : startMic()));
+$('syOpen').addEventListener('click', syncToggle);
 $('bar').addEventListener('click', (e) => {
   if (!audio.duration) return;
   const r = e.currentTarget.getBoundingClientRect();
