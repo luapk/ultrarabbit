@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ULTRARABBIT // BURROW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --red: #ff2d2d; --tc: #fff; --bg: #000; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden; color: #fff; }
+  body { font-family: "Fira Code", ui-monospace, monospace; -webkit-font-smoothing: antialiased; }
+  body.idle { cursor: none; }
+
+  #stage { position: fixed; inset: 0; background: #000; }
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .txt {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    overflow: hidden; color: var(--tc);
+    font-family: "Bebas Neue", Impact, "Arial Narrow", sans-serif;
+    line-height: .82; text-transform: uppercase; white-space: nowrap;
+  }
+  .txt .ln { display: block; padding: 0 .04em; will-change: transform; }
+  .txt .ln.inv { background: var(--tc); color: var(--bg); }
+  .txt .ln.out { color: transparent; -webkit-text-stroke: var(--sw, 3px) var(--tc); }
+  .txt .row { display: block; width: 100%; overflow: visible; }
+  .txt .row span { display: inline-block; will-change: transform; }
+
+  #grain {
+    opacity: .09; mix-blend-mode: normal;
+    background-repeat: repeat;
+  }
+  #scan { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
+  #flash { background: #fff; opacity: 0; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .4s; z-index: 5; }
+  body.idle #hud, body.nohud #hud { opacity: 0; }
+  #hud .tl, #hud .tr {
+    position: absolute; top: max(16px, env(safe-area-inset-top)); font-size: 11px; letter-spacing: .18em;
+    color: #fff; background: #000; padding: 6px 8px;
+  }
+  #hud .tl { left: 16px; }
+  #hud .tr { right: 16px; text-align: right; }
+  #hud .tl b { color: #fff; font-weight: 600; }
+  #hud .bot {
+    position: absolute; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; pointer-events: auto;
+  }
+  #hud button {
+    font: 600 12px "Fira Code", monospace; letter-spacing: .1em; background: var(--red); color: #000;
+    border: 0; padding: 9px 12px; cursor: pointer; min-width: 40px;
+  }
+  #hud button.ghost { background: #000; color: #fff; outline: 1px solid #fff; }
+  #hud button.on { background: #fff; color: #000; }
+  #trk { font-size: 12px; letter-spacing: .14em; background: #000; color: #fff; padding: 9px 12px; }
+  #bar { flex: 1 1 160px; height: 4px; background: rgba(255,255,255,.25); min-width: 120px; cursor: pointer; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--red); }
+  #keys { font-size: 10px; letter-spacing: .14em; color: #fff; background: #000; padding: 4px 8px; }
+  #hud .bot .brk { flex-basis: 100%; height: 0; }
+
+  #gate {
+    position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 22px; background: rgba(0,0,0,.72); cursor: pointer; text-align: center; padding: 16px;
+    transition: opacity .5s;
+  }
+  #gate.gone { opacity: 0; pointer-events: none; }
+  #gate h1 {
+    font: 400 clamp(64px, 17vw, 260px)/.8 "Bebas Neue", Impact, sans-serif; color: var(--red); letter-spacing: .02em;
+  }
+  #gate .go { font-size: 13px; letter-spacing: .3em; color: #000; background: #fff; padding: 12px 18px; }
+  #gate .alt { font-size: 11px; letter-spacing: .2em; color: #fff; }
+  #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
+  #gate .alt u:hover { color: var(--red); }
+
+  @media (max-width: 640px) { #keys { display: none; } #trk { font-size: 11px; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="back" class="layer txt"></div>
+  <canvas id="gl"></canvas>
+  <div id="front" class="layer txt"></div>
+  <div id="grain" class="layer"></div>
+  <div id="scan" class="layer"></div>
+  <div id="flash" class="layer"></div>
+</div>
+
+<div id="hud">
+  <div class="tl"><b>ULTRARABBIT</b> // BURROW<br><span id="scn">—</span></div>
+  <div class="tr"><span id="src">IDLE</span><br><span id="bpm">BPM —</span></div>
+  <div class="bot">
+    <button id="prev" aria-label="Previous track">◂◂</button>
+    <button id="play" aria-label="Play or pause">▶</button>
+    <button id="next" aria-label="Next track">▸▸</button>
+    <div id="trk">—</div>
+    <div id="bar"><i></i></div>
+    <button id="mic" class="ghost" aria-label="Use microphone">MIC</button>
+    <div class="brk"></div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–6 SCENE · M MIC · F FULLSCREEN · H HIDE HUD</div>
+  </div>
+</div>
+
+<div id="gate">
+  <h1>ULTRARABBIT</h1>
+  <div class="go">[ CLICK TO ENTER ]</div>
+  <div class="alt">or <u id="gateMic">USE MIC</u> for live mode</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+const TRACKS = [
+  { title: 'THIS IS WHO WE ARE', src: '/ThisIsWhoWeAre.mp3' },
+  { title: 'WORKING FROM HOME', src: '/WorkingFromHome.mp3' },
+  { title: 'POCKET CALL', src: '/PocketCall.mp3' },
+];
+
+const LINES = [
+  [
+    "WE'RE IN YOUR FACE", 'EAT OUR DUST', "WE'RE SCREAMING PAST", "YOU CAN'T HOLD US BACK",
+    'THE WORLD IS OURS', 'THE ULTRARABBIT ALWAYS WINS', "WE'RE COMING THROUGH", 'THIS IS WHO WE ARE NOW',
+  ],
+  [
+    'I SAY FUCK THAT', 'FUCK THAT! TONIGHT I WANT MORE', 'THE NIGHT IS YOUNG', "I DON'T WANNA GO HOME",
+    'A SHED TO BUILD AND A WIFE TO AVOID', 'THE WORST THAT CAN HAPPEN IS A WRITTEN WARNING',
+    "NEXT ROUND'S ON ME", "MY HANGOVER'S SCREAMING", 'NEVER AGAIN!!!', 'ANY WAY!',
+    'LEAVING ME HERE DRINKING ON MY OWN', 'SAME AGAIN',
+  ],
+  [
+    'WHAT DID YOU HEAR?', 'IT WAS A POCKET CALL', 'HOW LONG WERE YOU LISTENING?', 'I THOUGHT I HEARD VOICES',
+    'BUT YOU LIVE ALONE', 'THAT MUST HAVE BEEN THE TV', 'DID YOU MEAN TO RING ME AT ALL?', 'WAS IT ALL MUFFLED?',
+  ],
+];
+
+const HEX = { red: '#ff2d2d', black: '#000000', white: '#ffffff' };
+const $ = (id) => document.getElementById(id);
+const stage = $('stage'), back = $('back'), front = $('front'), flashEl = $('flash'), grain = $('grain');
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+/* ------------------------------------------------------------------ */
+/* Low-poly rabbit mask geometry                                       */
+/* ------------------------------------------------------------------ */
+
+function hash3(x, y, z) {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// Keyed on rounded position so seam-duplicated vertices move together and the shell stays closed.
+function jitter(geo, amt) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const kx = Math.round(x * 1000) / 1000, ky = Math.round(y * 1000) / 1000, kz = Math.round(z * 1000) / 1000;
+    p.setXYZ(i,
+      x + (hash3(kx, ky, kz) - .5) * amt,
+      y + (hash3(ky, kz, kx) - .5) * amt,
+      z + (hash3(kz, kx, ky) - .5) * amt);
+  }
+}
+
+const flat = (g) => (g.index ? g.toNonIndexed() : g);
+
+function removeTris(geo, test) {
+  const a = geo.attributes.position.array, out = [];
+  for (let i = 0; i < a.length; i += 9) {
+    const cx = (a[i] + a[i + 3] + a[i + 6]) / 3, cy = (a[i + 1] + a[i + 4] + a[i + 7]) / 3, cz = (a[i + 2] + a[i + 5] + a[i + 8]) / 3;
+    if (!test(cx, cy, cz)) for (let k = 0; k < 9; k++) out.push(a[i + k]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  return g;
+}
+
+const MASK = { w: 1, h: 1, faceY: 0 };
+function buildMask() {
+  const parts = [];
+
+  // Long carved face: domed brow with a hard ledge, pinhole eyes, straight nose ridge, small open mouth.
+  let face = new THREE.SphereGeometry(1, 12, 15, 0, Math.PI, Math.PI * .03, Math.PI * .93);
+  face.scale(.8, 1.6, .6);
+  const fp = face.attributes.position;
+  for (let i = 0; i < fp.count; i++) {
+    let x = fp.getX(i), y = fp.getY(i), z = fp.getZ(i);
+    x *= 1 - .3 * Math.min(1, Math.max(0, -y / 1.6));
+    const front = z > .05 ? 1 : 0;
+    if (y > .45) z += .26 * front * (1 - Math.min(1, ((y - .45) / 1.2) ** 2));
+    if (y > -.05 && y <= .45 && Math.abs(x) > .1) z -= .1 * front;
+    if (Math.abs(x) < .13 && y > -.95 && y < .45) z += .22 * front * (1 - Math.abs(x) / .13);
+    if (Math.abs(x) < .34 && y > -1.45 && y < -.95) z += .15 * front * (1 - Math.abs(x) / .34);
+    fp.setXYZ(i, x, y, z);
+  }
+  jitter(face, .035);
+  face = flat(face);
+  parts.push([face, 0]);
+
+  // Features sit on the carved surface: find it by casting rays at the shell.
+  const probe = new THREE.Mesh(face, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const ray = new THREE.Raycaster();
+  const surfZ = (x, y) => {
+    ray.set(new THREE.Vector3(x, y, 5), new THREE.Vector3(0, 0, -1));
+    const hit = ray.intersectObject(probe)[0];
+    return hit ? hit.point.z : .5;
+  };
+  for (const s of [-1, 1]) {
+    const eye = new THREE.OctahedronGeometry(.065, 0);
+    eye.scale(1, 1, .4); eye.translate(s * .22, .22, surfZ(s * .22, .22) + .01);
+    parts.push([flat(eye), 1]);
+  }
+  const mouth = new THREE.BoxGeometry(.3, .1, .05);
+  mouth.translate(0, -1.2, surfZ(0, -1.2) + .005);
+  parts.push([flat(mouth), 3]);
+
+  const tab = new THREE.CylinderGeometry(.07, .09, .32, 5);
+  tab.translate(0, -1.68, .22);
+  parts.push([flat(tab), 0]);
+
+  // Tall, straight, pointed ears, widest a third of the way up.
+  for (const s of [-1, 1]) {
+    const ear = new THREE.CylinderGeometry(1, 1, 1, 6, 4);
+    const ep = ear.attributes.position;
+    for (let i = 0; i < ep.count; i++) {
+      const h = ep.getY(i) + .5;
+      const r = h < .32 ? .72 + h * .9 : Math.max(0, 1 - (h - .32) / .68) ** .8;
+      ep.setXYZ(i, ep.getX(i) * r * .2, h * 2.5, ep.getZ(i) * r * .09);
+    }
+    ear.rotateX(-.06);
+    ear.rotateZ(-s * .13);
+    ear.translate(s * .3, .95, -.06);
+    jitter(ear, .03);
+    parts.push([flat(ear), 0]);
+  }
+
+  let total = 0;
+  parts.forEach(([g]) => (total += g.attributes.position.count));
+  const pos = new Float32Array(total * 3), cen = new Float32Array(total * 3), rnd = new Float32Array(total * 3);
+  const bar = new Float32Array(total * 3), acc = new Float32Array(total);
+  const BARY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  let v = 0;
+  for (const [g, accent] of parts) {
+    const a = g.attributes.position.array;
+    for (let i = 0; i < a.length; i += 9) {
+      const c = [(a[i] + a[i + 3] + a[i + 6]) / 3, (a[i + 1] + a[i + 4] + a[i + 7]) / 3, (a[i + 2] + a[i + 5] + a[i + 8]) / 3];
+      const r = [Math.random(), Math.random(), Math.random()];
+      for (let k = 0; k < 3; k++, v++) {
+        pos.set([a[i + k * 3], a[i + k * 3 + 1], a[i + k * 3 + 2]], v * 3);
+        cen.set(c, v * 3); rnd.set(r, v * 3); bar.set(BARY[k], v * 3); acc[v] = accent;
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aCentroid', new THREE.BufferAttribute(cen, 3));
+  geo.setAttribute('aRand', new THREE.BufferAttribute(rnd, 3));
+  geo.setAttribute('aBary', new THREE.BufferAttribute(bar, 3));
+  geo.setAttribute('aAccent', new THREE.BufferAttribute(acc, 1));
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, c = bb.getCenter(new THREE.Vector3());
+  geo.translate(-c.x, -c.y, 0);
+  const cen2 = geo.attributes.aCentroid;
+  for (let i = 0; i < cen2.count; i++) cen2.setXYZ(i, cen2.getX(i) - c.x, cen2.getY(i) - c.y, cen2.getZ(i));
+  MASK.w = bb.max.x - bb.min.x; MASK.h = bb.max.y - bb.min.y; MASK.faceY = -c.y;
+  return geo;
+}
+
+/* 3-band toon shader: every facet resolves to exactly one of the palette colours. */
+const VERT = `
+attribute vec3 aCentroid; attribute vec3 aRand; attribute vec3 aBary; attribute float aAccent;
+uniform float uExplode, uTime, uGlitch;
+varying vec3 vN; varying vec3 vBary; varying float vAccent; varying float vDepth;
+mat3 rotAxis(vec3 ax, float a) {
+  ax = normalize(ax); float s = sin(a), c = cos(a), oc = 1. - c;
+  return mat3(oc*ax.x*ax.x + c, oc*ax.x*ax.y + ax.z*s, oc*ax.z*ax.x - ax.y*s,
+              oc*ax.x*ax.y - ax.z*s, oc*ax.y*ax.y + c, oc*ax.y*ax.z + ax.x*s,
+              oc*ax.z*ax.x + ax.y*s, oc*ax.y*ax.z - ax.x*s, oc*ax.z*ax.z + c);
+}
+void main() {
+  float e = uExplode * (.5 + aRand.x);
+  mat3 R = rotAxis(aRand * 2. - 1. + vec3(.001), e * 4.);
+  vec3 dir = normalize(aCentroid * vec3(1., 1., 1.6) + (aRand - .5) * .8 + vec3(0., 0., .001));
+  vec3 p = aCentroid + R * (position - aCentroid) * max(0., 1. - e * .25) + dir * e * 1.6;
+  if (uGlitch > 0.) {
+    float sl = floor((p.y + uTime * 3.) * 6.);
+    float r = fract(sin(sl * 127.1 + floor(uTime * 24.) * 7.) * 43758.5);
+    p.x += uGlitch * (r - .5) * step(.55, r) * 1.4;
+  }
+  vN = normalize(normalMatrix * (R * normal));
+  vBary = aBary; vAccent = aAccent;
+  vec4 mv = modelViewMatrix * vec4(p, 1.);
+  vDepth = -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const FRAG = `
+uniform vec3 cDark, cMid, cLight, cAccent, cEdge, cFade, cVoid, uLight;
+uniform float uEdge, uFlash, uFadeNear, uFadeFar, uT1, uT2;
+varying vec3 vN; varying vec3 vBary; varying float vAccent; varying float vDepth;
+void main() {
+  vec3 n = normalize(vN);
+  if (!gl_FrontFacing) n = -n;
+  float l = dot(n, normalize(uLight)) * .5 + .5 + uFlash;
+  vec3 c = l < uT1 ? cDark : (l < uT2 ? cMid : cLight);
+  if (vAccent > 2.5) c = cVoid; else if (vAccent > 1.5) c = cLight; else if (vAccent > .5) c = cAccent;
+  float m = min(min(vBary.x, vBary.y), vBary.z);
+  float edge = 1. - smoothstep(0., fwidth(m) * 1.3, m);
+  c = mix(c, cEdge, edge * uEdge);
+  c = mix(c, cFade, smoothstep(uFadeNear, uFadeFar, vDepth));
+  gl_FragColor = vec4(c, 1.);
+}`;
+
+/* ------------------------------------------------------------------ */
+/* Three.js setup                                                      */
+/* ------------------------------------------------------------------ */
+
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, .1, 200);
+const camBase = { pos: new THREE.Vector3(0, 0, 6), look: new THREE.Vector3() };
+
+const baseMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uExplode: { value: 0 }, uTime: { value: 0 }, uGlitch: { value: 0 },
+    cDark: { value: new THREE.Color() }, cMid: { value: new THREE.Color() }, cLight: { value: new THREE.Color() },
+    cAccent: { value: new THREE.Color() }, cEdge: { value: new THREE.Color() }, cFade: { value: new THREE.Color() },
+    cVoid: { value: new THREE.Color() },
+    uLight: { value: new THREE.Vector3(.4, .7, .6) },
+    uEdge: { value: 1 }, uFlash: { value: 0 }, uFadeNear: { value: 900 }, uFadeFar: { value: 1000 },
+    uT1: { value: .5 }, uT2: { value: .8 },
+  },
+  vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, extensions: { derivatives: true },
+});
+
+const maskGeo = buildMask();
+const masks = [];
+for (let i = 0; i < 40; i++) {
+  const m = new THREE.Mesh(maskGeo, baseMat.clone());
+  m.frustumCulled = false;
+  m.visible = false;
+  m.userData = { phase: Math.random() * Math.PI * 2, nod: 0 };
+  scene.add(m);
+  masks.push(m);
+}
+
+function palette(m, dark, mid, light, accent, edge) {
+  const u = m.material.uniforms;
+  u.cDark.value.set(HEX[dark]); u.cMid.value.set(HEX[mid]); u.cLight.value.set(HEX[light]);
+  u.cAccent.value.set(HEX[accent]); u.cEdge.value.set(HEX[edge]);
+}
+
+function resetMasks() {
+  for (const m of masks) {
+    m.visible = false;
+    m.position.set(0, 0, 0); m.rotation.set(0, 0, 0); m.scale.setScalar(1);
+    const u = m.material.uniforms;
+    u.uExplode.value = 0; u.uGlitch.value = 0; u.uFlash.value = 0; u.uEdge.value = 0;
+    u.uFadeNear.value = 900; u.uFadeFar.value = 1000;
+  }
+}
+
+function setCam(fov, pos, look = [0, 0, 0]) {
+  camera.fov = fov;
+  camBase.pos.set(...pos); camBase.look.set(...look);
+  camera.position.copy(camBase.pos); camera.lookAt(camBase.look);
+  camera.updateProjectionMatrix();
+}
+
+let bgName = 'black';
+function setBg(name) {
+  bgName = name;
+  stage.style.background = HEX[name];
+  document.documentElement.style.setProperty('--bg', HEX[name]);
+}
+
+const view = () => ({ W: window.innerWidth, H: window.innerHeight, aspect: window.innerWidth / window.innerHeight });
+const visH = (dist) => 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+
+/* ------------------------------------------------------------------ */
+/* Audio + beat detection                                              */
+/* ------------------------------------------------------------------ */
+
+const audio = new Audio();
+audio.preload = 'auto';
+let actx = null, analyser = null, data = null, micSrc = null, micStream = null;
+let mode = 'idle', cur = 0;
+
+const A = { bass: 0, mid: 0, high: 0, level: 0, beat: false, strength: 0, kick: 0, beatCount: 0, lastBeat: -10, bpm: 0 };
+const hist = [], ibis = [];
+
+function ensureCtx() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = actx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = .55;
+  data = new Uint8Array(analyser.frequencyBinCount);
+  const el = actx.createMediaElementSource(audio);
+  el.connect(analyser);
+  el.connect(actx.destination);
+}
+
+function band(a, b) {
+  let s = 0;
+  for (let i = a; i < b; i++) s += data[i];
+  return s / (b - a) / 255;
+}
+
+function analyse(t, dt) {
+  A.beat = false;
+  const live = analyser && ((mode === 'track' && !audio.paused) || mode === 'mic');
+  if (live) {
+    analyser.getByteFrequencyData(data);
+    A.bass = band(1, 6); A.mid = band(6, 48); A.high = band(48, 220); A.level = band(0, 256);
+    hist.push(A.bass);
+    if (hist.length > 45) hist.shift();
+    const mean = hist.reduce((s, x) => s + x, 0) / hist.length;
+    const sd = Math.sqrt(hist.reduce((s, x) => s + (x - mean) ** 2, 0) / hist.length);
+    if (A.bass > mean + Math.max(.05, sd * 1.15) && A.bass > .25 && t - A.lastBeat > .27) {
+      A.beat = true;
+      A.strength = Math.min(1, Math.max(.35, (A.bass - mean) * 5));
+    }
+  } else {
+    // Attract mode: a steady 120 BPM pulse so the page is alive before audio starts.
+    if (t - A.lastBeat > .5) { A.beat = true; A.strength = .7; }
+    A.bass = Math.exp(-(t - A.lastBeat) * 6) * .7;
+    A.mid = .3 + Math.sin(t * 1.3) * .1; A.high = .2; A.level = .3;
+  }
+  if (A.beat) {
+    const ibi = t - A.lastBeat;
+    if (ibi > .27 && ibi < 1.2) { ibis.push(ibi); if (ibis.length > 24) ibis.shift(); }
+    if (ibis.length > 6) {
+      const s = [...ibis].sort((a, b) => a - b);
+      A.bpm = Math.round(60 / s[s.length >> 1]);
+    }
+    A.lastBeat = t;
+    A.beatCount++;
+  }
+  A.kick = Math.max(A.kick * Math.exp(-dt * 7), A.beat ? A.strength : 0);
+}
+
+function playTrack(i) {
+  stopMic();
+  cur = (i + TRACKS.length) % TRACKS.length;
+  audio.src = TRACKS[cur].src;
+  audio.play().catch(() => {});
+  mode = 'track';
+  updateHud();
+}
+
+function togglePlay() {
+  if (mode !== 'track') return playTrack(cur);
+  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  updateHud();
+}
+
+async function startMic() {
+  ensureCtx();
+  await actx.resume();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+  } catch (e) {
+    $('src').textContent = 'MIC BLOCKED';
+    return;
+  }
+  audio.pause();
+  micSrc = actx.createMediaStreamSource(micStream);
+  micSrc.connect(analyser);
+  mode = 'mic';
+  updateHud();
+}
+
+function stopMic() {
+  if (!micStream) return;
+  micSrc.disconnect();
+  micStream.getTracks().forEach((tr) => tr.stop());
+  micStream = micSrc = null;
+  if (mode === 'mic') mode = 'idle';
+  updateHud();
+}
+
+audio.addEventListener('ended', () => playTrack(cur + 1));
+audio.addEventListener('play', updateHud);
+audio.addEventListener('pause', updateHud);
+
+/* ------------------------------------------------------------------ */
+/* Giant lyric typography                                              */
+/* ------------------------------------------------------------------ */
+
+const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, beats: 0, punch: 0, rot: 0, offs: [] };
+let lastPhrase = '';
+
+function nextPhrase() {
+  const pool = mode === 'track' && Math.random() < .8 ? LINES[cur] : LINES.flat();
+  let p;
+  do { p = pick(pool); } while (p === lastPhrase);
+  lastPhrase = p;
+  T.phrase = p;
+  T.words = p.split(' ');
+  T.wi = 0;
+}
+
+function wrapLines(phrase, max) {
+  const out = [];
+  let line = '';
+  for (const w of phrase.split(' ')) {
+    if (line && (line + ' ' + w).length > max) { out.push(line); line = w; } else line = line ? line + ' ' + w : w;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+function fitSpan(span, maxW, maxH) {
+  span.style.fontSize = '100px';
+  const w = span.getBoundingClientRect().width || 1;
+  const fs = Math.min(100 * maxW / w, maxH / .82);
+  span.style.fontSize = fs + 'px';
+  return fs;
+}
+
+function lineEl(text, cls = '') {
+  const s = document.createElement('span');
+  s.className = 'ln ' + cls;
+  s.textContent = text;
+  return s;
+}
+
+function renderText() {
+  const { W, H } = view();
+  const el = T.el;
+  el.replaceChildren();
+  el.style.transform = '';
+  if (T.mode === 'slam') {
+    const s = lineEl(T.words[T.wi]);
+    el.append(s);
+    fitSpan(s, W * .94, H * .72);
+  } else if (T.mode === 'block') {
+    const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
+    const spans = lines.map((l) => lineEl(l));
+    el.append(...spans);
+    const sizes = spans.map((s) => fitSpan(s, W * .94, H));
+    const total = sizes.reduce((a, b) => a + b * .82, 0);
+    if (total > H * .92) {
+      const k = H * .92 / total;
+      spans.forEach((s, i) => (s.style.fontSize = sizes[i] * k + 'px'));
+    }
+  } else if (T.mode === 'marquee') {
+    T.offs = [];
+    const fs = H / 3.1;
+    for (let r = 0; r < 3; r++) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const s = lineEl((T.phrase + ' ✕ ').repeat(8), r === 1 ? '' : 'out');
+      s.style.fontSize = fs + 'px';
+      s.style.setProperty('--sw', Math.max(2, fs / 60) + 'px');
+      row.append(s);
+      el.append(row);
+      T.offs.push(-rand(0, W));
+    }
+  }
+}
+
+function textSetup(textMode, layer, color) {
+  back.replaceChildren(); front.replaceChildren();
+  T.mode = textMode;
+  T.el = layer === 'back' ? back : front;
+  T.el.style.setProperty('--tc', HEX[color]);
+  T.beats = 0;
+  nextPhrase();
+  renderText();
+}
+
+function textBeat() {
+  T.beats++;
+  if (T.mode === 'slam') {
+    T.wi++;
+    if (T.wi >= T.words.length) nextPhrase();
+    renderText();
+    T.punch = 1;
+    T.rot = rand(-3, 3);
+  } else if (T.mode === 'block') {
+    if (T.beats % 8 === 0) { nextPhrase(); renderText(); T.punch = 1; } else {
+      const spans = [...T.el.children];
+      spans.forEach((s) => s.classList.remove('inv'));
+      if (spans.length) pick(spans).classList.add('inv');
+      T.punch = .5;
+    }
+    T.rot = 0;
+  } else if (T.mode === 'marquee') {
+    if (T.beats % 16 === 0) { nextPhrase(); renderText(); }
+    const rows = [...T.el.querySelectorAll('.ln')];
+    rows.forEach((s, i) => s.classList.toggle('out', (i + T.beats) % 2 === 0));
+  }
+}
+
+function textUpdate(dt) {
+  T.punch *= Math.exp(-dt * 12);
+  const shake = A.kick > .65 ? rand(-1, 1) * A.kick * 14 : 0;
+  if (T.mode === 'marquee') {
+    const speed = 90 + A.level * 700 + A.kick * 500;
+    [...T.el.querySelectorAll('.ln')].forEach((s, i) => {
+      const half = s.getBoundingClientRect().width / 2;
+      T.offs[i] += (i % 2 ? 1 : -1) * speed * dt;
+      if (T.offs[i] < -half) T.offs[i] += half;
+      if (T.offs[i] > 0) T.offs[i] -= half;
+      s.style.transform = `translateX(${T.offs[i]}px)`;
+    });
+    T.el.style.transform = `translateX(${shake}px)`;
+  } else {
+    T.el.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .12}) rotate(${T.rot * T.punch}deg)`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Scenes                                                              */
+/* ------------------------------------------------------------------ */
+
+const S = {};
+
+S.FACE = {
+  len: 16,
+  setup() {
+    setCam(35, [0, 0, 6]);
+    setBg('black');
+    const m = masks[0];
+    m.visible = true;
+    palette(m, 'black', 'red', 'white', 'red', 'black');
+    const { aspect } = view(), h = visH(6);
+    this.s = Math.min(.86 * h / 3.4, .8 * h * aspect / MASK.w);
+  },
+  text: ['block', 'back', 'white'],
+  update(t) {
+    const m = masks[0];
+    m.rotation.set(-A.kick * .3 + Math.sin(t * .3) * .06, Math.sin(t * .45) * .55, Math.sin(t * .23) * .08);
+    m.scale.setScalar(this.s * (1 + A.kick * .05));
+    m.position.y = -MASK.faceY * this.s;
+    m.material.uniforms.uGlitch.value = A.kick > .85 ? .25 : 0;
+    m.material.uniforms.uFlash.value = A.kick * .12;
+  },
+};
+
+S.ARMY = {
+  len: 16,
+  setup() {
+    setBg('red');
+    const { aspect } = view();
+    this.sx = MASK.w * 1.2; this.sy = MASK.h * 1.02;
+    this.rows = aspect > 1 ? 2 : 3;
+    this.cols = Math.max(2, Math.min(12, Math.round(aspect * this.rows * this.sy / this.sx)));
+    const fov = 35, gw = this.cols * this.sx, gh = this.rows * this.sy;
+    const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    const d = Math.max(gh / 2 / tan, gw / 2 / (tan * aspect)) * 1.02;
+    setCam(fov, [0, 0, d]);
+    this.n = this.cols * this.rows;
+    for (let i = 0; i < this.n; i++) {
+      masks[i].visible = true;
+      masks[i].scale.setScalar(1);
+      palette(masks[i], 'black', 'black', 'white', 'red', 'red');
+    }
+    this.odd = -1;
+  },
+  text: ['slam', 'front', 'white'],
+  update(t) {
+    if (A.beat && A.beatCount % 4 === 0) {
+      if (this.odd >= 0) palette(masks[this.odd], 'black', 'black', 'white', 'red', 'red');
+      this.odd = Math.floor(Math.random() * this.n);
+      palette(masks[this.odd], 'white', 'white', 'white', 'black', 'black');
+    }
+    for (let i = 0; i < this.n; i++) {
+      const m = masks[i], c = i % this.cols, r = Math.floor(i / this.cols);
+      const x = t - A.lastBeat - (c + r) * .035;
+      const nod = x >= 0 ? Math.exp(-x * 8) * A.strength : 0;
+      m.position.set((c - (this.cols - 1) / 2) * this.sx, -(r - (this.rows - 1) / 2) * this.sy + nod * .12, 0);
+      m.rotation.set(-nod * .5, Math.sin(t * .7 + m.userData.phase) * .35, Math.sin(t * .5 + m.userData.phase) * .05);
+    }
+  },
+};
+
+S.SHATTER = {
+  len: 16,
+  setup() {
+    setCam(35, [0, 0, 6]);
+    setBg('white');
+    const m = masks[0];
+    m.visible = true;
+    palette(m, 'black', 'red', 'red', 'black', 'white');
+    const { aspect } = view(), h = visH(6);
+    this.s = Math.min(.9 * h / MASK.h, .7 * h * aspect / MASK.w);
+    this.ex = 0; this.target = 0; this.ry = 0;
+  },
+  text: ['marquee', 'back', 'black'],
+  update(t, dt) {
+    const m = masks[0];
+    if (A.beat) this.target = A.beatCount % 8 === 0 ? 2.6 : Math.max(this.target, A.strength * .55);
+    this.target *= Math.exp(-dt * 2.6);
+    this.ex += (this.target - this.ex) * Math.min(1, dt * 16);
+    this.ry += dt * (.35 + A.mid);
+    m.material.uniforms.uExplode.value = this.ex;
+    m.material.uniforms.uEdge.value = Math.min(1, this.ex * 3);
+    m.rotation.set(Math.sin(t * .4) * .15, Math.sin(this.ry) * .7, 0);
+    m.scale.setScalar(this.s);
+    m.position.y = 0;
+  },
+};
+
+S.TUNNEL = {
+  len: 24,
+  setup() {
+    setCam(75, [0, 0, 4], [0, 0, -10]);
+    setBg('black');
+    this.n = 28; this.spin = 0;
+    for (let i = 0; i < this.n; i++) {
+      const m = masks[i];
+      m.visible = true;
+      m.userData.z = -50 + (i / this.n) * 54;
+      m.userData.a = (i * 2.39996) % (Math.PI * 2);
+      palette(m, 'red', 'white', 'white', 'red', 'black');
+      const u = m.material.uniforms;
+      u.uFadeNear.value = 14; u.uFadeFar.value = 44; u.cFade.value.set(HEX.black);
+    }
+  },
+  text: ['slam', 'front', 'white'],
+  update(t, dt) {
+    const speed = 5 + A.level * 26 + A.kick * 18;
+    this.spin += dt * (.2 + A.mid * .8);
+    for (let i = 0; i < this.n; i++) {
+      const m = masks[i], d = m.userData;
+      d.z += speed * dt;
+      if (d.z > 4) d.z -= 54;
+      const a = d.a + this.spin, r = 3.6 + Math.sin(d.z * .2 + i) * .4;
+      m.position.set(Math.cos(a) * r, Math.sin(a) * r, d.z);
+      m.rotation.set(0, Math.sin(t + d.a) * .3, a - Math.PI / 2);
+    }
+  },
+};
+
+S.ORBIT = {
+  len: 16,
+  setup() {
+    setBg('red');
+    const { aspect } = view();
+    setCam(40, [0, 1.6, aspect < 1 ? 15 : 10], [0, 0, 0]);
+    this.n = 8;
+    for (let i = 0; i < this.n; i++) {
+      masks[i].visible = true;
+      palette(masks[i], 'black', 'black', 'white', 'red', 'red');
+    }
+  },
+  text: ['block', 'back', 'white'],
+  update(t) {
+    for (let i = 0; i < this.n; i++) {
+      const m = masks[i];
+      const ang = (i / this.n) * Math.PI * 2 + t * .35;
+      const x = t - A.lastBeat;
+      const nod = (A.beatCount % 2) === (i % 2) ? Math.exp(-x * 8) * A.strength : 0;
+      m.position.set(Math.sin(ang) * 3.4, Math.sin(t * 2 + i) * .15 + nod * .25, Math.cos(ang) * 3.4);
+      m.rotation.set(-nod * .4, ang + Math.sin(t + i) * .3, 0);
+      m.scale.setScalar(.75);
+    }
+  },
+};
+
+const STROBE_LOOKS = {
+  black: { pal: ['red', 'white', 'white', 'red', 'black'], text: 'white' },
+  red: { pal: ['black', 'black', 'white', 'white', 'red'], text: 'black' },
+  white: { pal: ['black', 'red', 'red', 'black', 'white'], text: 'red' },
+};
+
+S.STROBE = {
+  len: 12,
+  setup() {
+    setCam(35, [0, 0, 6]);
+    const m = masks[0];
+    m.visible = true;
+    const { aspect } = view(), h = visH(6);
+    this.s = Math.min(.8 * h / 3.4, .75 * h * aspect / MASK.w);
+    this.rx = 0; this.ry = 0;
+    this.look('black');
+  },
+  look(bg) {
+    setBg(bg);
+    palette(masks[0], ...STROBE_LOOKS[bg].pal);
+    T.el.style.setProperty('--tc', HEX[STROBE_LOOKS[bg].text]);
+  },
+  text: ['slam', 'front', 'white'],
+  update() {
+    const m = masks[0];
+    if (A.beat) {
+      this.look(['black', 'red', 'white'][A.beatCount % 3]);
+      this.ry = rand(-.9, .9); this.rx = rand(-.25, .2);
+    }
+    m.rotation.set(this.rx, this.ry, 0);
+    m.scale.setScalar(this.s * (1 + A.kick * .1));
+    m.position.y = -MASK.faceY * this.s;
+    m.material.uniforms.uGlitch.value = A.kick > .5 ? A.kick * .5 : 0;
+  },
+};
+
+const ORDER = ['FACE', 'ARMY', 'SHATTER', 'TUNNEL', 'ORBIT', 'STROBE'];
+let sceneName = 'FACE', sceneBeat = 0, flash = 0;
+
+function setScene(name, keepText = false) {
+  sceneName = name;
+  sceneBeat = A.beatCount;
+  resetMasks();
+  if (!keepText) textSetup(...S[name].text);
+  S[name].setup();
+  if (keepText) renderText();
+  if (!keepText) flash = 1;
+  $('scn').textContent = `SCENE ${ORDER.indexOf(name) + 1}/${ORDER.length} · ${name}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* HUD, input, grain                                                   */
+/* ------------------------------------------------------------------ */
+
+function updateHud() {
+  const playing = mode === 'track' && !audio.paused;
+  $('play').textContent = playing ? '❚❚' : '▶';
+  $('trk').textContent = mode === 'mic' ? 'LIVE INPUT' : TRACKS[cur].title;
+  $('src').textContent = mode === 'mic' ? 'MIC' : playing ? 'PLAYING' : mode === 'track' ? 'PAUSED' : 'IDLE';
+  $('mic').classList.toggle('on', mode === 'mic');
+}
+
+function enter(useMic) {
+  $('gate').classList.add('gone');
+  ensureCtx();
+  actx.resume();
+  if (useMic) startMic(); else playTrack(cur);
+}
+
+$('gate').addEventListener('click', (e) => enter(e.target.id === 'gateMic'));
+$('play').addEventListener('click', () => { ensureCtx(); actx.resume(); togglePlay(); });
+$('prev').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur - 1); });
+$('next').addEventListener('click', () => { ensureCtx(); actx.resume(); playTrack(cur + 1); });
+$('mic').addEventListener('click', () => (mode === 'mic' ? stopMic() : startMic()));
+$('bar').addEventListener('click', (e) => {
+  if (!audio.duration) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
+});
+
+window.addEventListener('keydown', (e) => {
+  const gateOpen = !$('gate').classList.contains('gone');
+  if (e.code === 'Space') { e.preventDefault(); if (gateOpen) enter(false); else togglePlay(); }
+  else if (e.key === 'ArrowRight') { ensureCtx(); actx.resume(); playTrack(cur + 1); }
+  else if (e.key === 'ArrowLeft') { ensureCtx(); actx.resume(); playTrack(cur - 1); }
+  else if (e.key >= '1' && e.key <= String(ORDER.length)) setScene(ORDER[+e.key - 1]);
+  else if (e.key === 'm' || e.key === 'M') { if (gateOpen) enter(true); else if (mode === 'mic') stopMic(); else startMic(); }
+  else if (e.key === 'f' || e.key === 'F') {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.();
+  } else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('nohud');
+});
+
+let idleTimer = 0;
+const wake = () => { document.body.classList.remove('idle'); idleTimer = 2.5; };
+['mousemove', 'touchstart', 'keydown'].forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
+
+const mouse = { x: 0, y: 0 };
+window.addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX / window.innerWidth * 2 - 1;
+  mouse.y = e.clientY / window.innerHeight * 2 - 1;
+});
+
+(() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 160;
+  const g = c.getContext('2d'), img = g.createImageData(160, 160);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() * 255;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  grain.style.backgroundImage = `url(${c.toDataURL()})`;
+})();
+
+function resize() {
+  const { W, H } = view();
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  setScene(sceneName, true);
+}
+window.addEventListener('resize', resize);
+
+/* ------------------------------------------------------------------ */
+/* Main loop                                                           */
+/* ------------------------------------------------------------------ */
+
+const clock = new THREE.Clock();
+let t = 0;
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), .05);
+  t += dt;
+  analyse(t, dt);
+
+  if (A.beat) {
+    if (A.beatCount - sceneBeat >= S[sceneName].len) {
+      let n;
+      do { n = pick(ORDER); } while (n === sceneName);
+      setScene(n);
+    } else textBeat();
+  }
+
+  S[sceneName].update(t, dt);
+  textUpdate(dt);
+
+  const lx = Math.sin(t * .3) * .6, lz = .6 + Math.cos(t * .3) * .3;
+  for (const m of masks) {
+    if (!m.visible) continue;
+    const u = m.material.uniforms;
+    u.uTime.value = t;
+    u.uLight.value.set(lx, .7, lz);
+    u.cVoid.value.set(HEX[bgName]);
+  }
+
+  camera.position.set(camBase.pos.x + mouse.x * .35, camBase.pos.y - mouse.y * .25, camBase.pos.z);
+  camera.lookAt(camBase.look);
+  renderer.render(scene, camera);
+
+  flash *= Math.exp(-dt * 9);
+  flashEl.style.opacity = flash.toFixed(3);
+  grain.style.backgroundPosition = `${(Math.random() * 160) | 0}px ${(Math.random() * 160) | 0}px`;
+
+  if (mode === 'track' && audio.duration) $('bar').firstElementChild.style.width = (audio.currentTime / audio.duration * 100) + '%';
+  $('bpm').textContent = A.bpm && mode !== 'idle' ? `BPM ~${A.bpm}` : 'BPM —';
+
+  if (idleTimer > 0) {
+    idleTimer -= dt;
+    if (idleTimer <= 0 && $('gate').classList.contains('gone')) document.body.classList.add('idle');
+  }
+}
+
+updateHud();
+const start = () => { resize(); setScene('FACE'); frame(); };
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start);
+})();
+</script>
+</body>
+</html>
