@@ -184,7 +184,11 @@ const SONG_LINES = [["WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD U
 // Lines that always sit on the top layer with a highlight bar so they read over anything.
 const HIGHLIGHT = new Set(["WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE"]);
 
-// Index of the last line of each verse / chorus; these hold on screen until the next line.
+// Lyrics only show on the first and last line of each verse / chorus, the refrain, and the
+// highlighted lines. The last line of a verse / chorus holds until the next line starts.
+const REFRAIN = new Set(['THIS IS WHO WE ARE NOW', 'THIS IS WHAT WE DO']);
+
+// Index of the last line of each verse / chorus.
 const STANZA_ENDS = [[11, 23, 35, 55], [9, 17, 25, 33, 41, 48], [7, 15, 23, 31, 39]];
 
 // Start time in seconds of each SONG_LINES entry, recorded with sync mode (Y). null = not synced yet.
@@ -577,6 +581,9 @@ function currentLine() {
   for (let k = 0; k < times.length && times[k] <= ct; k++) i = k;
   if (i < 0) return null;
   const text = SONG_LINES[cur][i], words = text.split(' ');
+  const ends = STANZA_ENDS[cur];
+  const first = i === 0 || ends.includes(i - 1);
+  if (!first && !ends.includes(i) && !REFRAIN.has(text) && !HIGHLIGHT.has(text)) return null;
   const next = i + 1 < times.length ? times[i + 1] : Infinity;
   const paced = Math.min(next, times[i] + 1.6 + words.length * .55);
   const last = STANZA_ENDS[cur].includes(i);
@@ -731,9 +738,11 @@ function textUpdate(dt) {
 /* Techno totems: stacked glyphs built from the logo's geometry        */
 /* ------------------------------------------------------------------ */
 
-// Each module is drawn in a box 1 unit wide and `h` tall, with the logo's thick white strokes
-// and red rings on black. `o.c` is the main colour, `o.a` the accent, `o.look` the pupil offset.
-const TOT_LW = .075, TOT_GAP = .09, TOT_SPACER = .55;
+// Each module draws in a box 1 unit wide and `h` tall, in the logo's thick white strokes with red
+// accents. Everything moves off o.t (time), o.ph (0..1 through the current beat), o.e (that
+// module's spring kick, 0..1) and o.beat, so the motion stays locked to the music.
+const TOT_LW = .075, TOT_GAP = .1, TOT_SPACER = .55;
+const eOut = (p) => 1 - (1 - p) ** 3;
 
 function tPoly(g, pts, close = true) {
   g.beginPath();
@@ -742,76 +751,159 @@ function tPoly(g, pts, close = true) {
 }
 function tLine(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
 function tMirror(g, fn) { fn(); g.save(); g.translate(1, 0); g.scale(-1, 1); fn(); g.restore(); }
+function tRing(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); }
+function tDot(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+function tDashed(g, o, pattern, offset, fn) {
+  if (!o.full) return;
+  g.save(); g.setLineDash(pattern); g.lineDashOffset = offset; fn(); g.restore();
+}
+
+const EAR = [[.1, .9], [.1, .06], [.45, .4], [.45, .9]];
 
 const MODS = {
   EARS: { h: .95, draw(g, o) {
-    g.strokeStyle = o.c;
+    const hinge = o.e * .22 + Math.sin(o.t * 2.2) * .03;
     tMirror(g, () => {
-      tPoly(g, [[.1, .9], [.1, .06], [.45, .4], [.45, .9]]); g.stroke();
-      tPoly(g, [[.17, .9], [.17, .97]], false); g.stroke();
+      g.save();
+      g.translate(.27, .9); g.rotate(-hinge); g.translate(-.27, -.9);
+      g.strokeStyle = o.c;
+      tPoly(g, EAR); g.stroke();
+      tLine(g, .17, .9, .17, .97);
+      const k = .5 + Math.sin(o.t * 3) * .07 + o.e * .18;
+      g.translate(.27, .55); g.scale(k, k); g.translate(-.27, -.55);
+      g.lineWidth = TOT_LW * .5; g.strokeStyle = o.e > .3 ? o.a : o.c;
+      tPoly(g, EAR); g.stroke();
+      g.restore();
     });
   } },
   ARROWS: { h: .52, draw(g, o) {
-    for (let k = 0; k < 3; k++) {
-      const y = .03 + k * .16;
+    g.save();
+    g.beginPath(); g.rect(-.1, 0, 1.2, .52); g.clip();
+    const lift = eOut(o.ph) * .16, w = .13 * (1 + o.e * .35);
+    for (let k = 0; k < 4; k++) {
+      const y = .03 + k * .16 + .16 - lift;
       g.fillStyle = (k + o.beat) % 3 === 0 ? o.a : o.c;
-      tPoly(g, [[.5, y], [.37, y + .13], [.63, y + .13]]); g.fill();
+      tPoly(g, [[.5, y], [.5 - w, y + .13], [.5 + w, y + .13]]); g.fill();
     }
+    g.restore();
   } },
   DOME: { h: .58, draw(g, o) {
     g.strokeStyle = o.c; g.fillStyle = o.c;
     g.beginPath(); g.arc(.5, .56, .36, Math.PI, 0); g.stroke();
-    tPoly(g, [[.5, .02], [.41, .17], [.59, .17]]); g.fill();
+    g.lineWidth = TOT_LW * .4;
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI + ((i / 9 + o.t * .05) % 1) * Math.PI;
+      g.strokeStyle = i === o.beat % 9 ? o.a : o.c;
+      tLine(g, .5 + Math.cos(a) * .42, .56 + Math.sin(a) * .42, .5 + Math.cos(a) * .48, .56 + Math.sin(a) * .48);
+    }
+    g.strokeStyle = o.c;
+    tDashed(g, o, [.04, .035], -o.t * .25, () => { g.beginPath(); g.arc(.5, .56, .24, Math.PI, 0); g.stroke(); });
+    g.lineWidth = TOT_LW;
+    const sh = .15 + o.e * .14;
+    tPoly(g, [[.5, .17 - sh], [.41, .17], [.59, .17]]); g.fill();
     tMirror(g, () => tLine(g, .1, .2, .1, .56));
   } },
   CHEVRON: { h: .34, draw(g, o) {
+    const amp = 1 - o.e * .55;
+    const pts = (dy) => [[.08, .05], [.29, .29], [.5, .1], [.71, .29], [.92, .05]]
+      .map(([x, y], i) => [x, .05 + (y - .05) * amp + Math.sin(o.t * 5 + i * 1.3) * .015 + dy]);
+    if (o.e > .12) {
+      g.strokeStyle = o.a; g.lineWidth = TOT_LW * .4;
+      tPoly(g, pts(o.e * .12), false); g.stroke();
+      tPoly(g, pts(-o.e * .08), false); g.stroke();
+      g.lineWidth = TOT_LW;
+    }
     g.strokeStyle = o.c;
-    tPoly(g, [[.08, .05], [.29, .29], [.5, .1], [.71, .29], [.92, .05]], false); g.stroke();
+    tPoly(g, pts(0), false); g.stroke();
   } },
   GOGGLES: { h: .5, draw(g, o) {
     g.strokeStyle = o.c;
     tPoly(g, [[.1, .1], [.9, .1], [.98, .2], [.98, .38], [.9, .46], [.1, .46], [.02, .38], [.02, .2]]); g.stroke();
-    g.lineWidth = TOT_LW * .5;
-    tMirror(g, () => { tLine(g, .065, .21, .065, .35); });
-    tLine(g, .43, .18, .57, .18); tLine(g, .45, .24, .55, .24);
-    g.strokeStyle = o.a; g.lineWidth = TOT_LW * .8;
-    for (const x of [.3, .7]) { g.beginPath(); g.arc(x, .29, .145, 0, Math.PI * 2); g.stroke(); }
-    g.fillStyle = o.c;
-    for (const x of [.3, .7]) { g.beginPath(); g.arc(x + o.look * .065, .29, .048, 0, Math.PI * 2); g.fill(); }
+    g.lineWidth = TOT_LW * .45;
+    tMirror(g, () => {
+      for (let k = 0; k < 3; k++) { g.strokeStyle = k === o.beat % 3 ? o.a : o.c; tLine(g, .045 + k * .022, .22, .045 + k * .022, .34); }
+    });
+    g.strokeStyle = o.c;
+    const w1 = .07 + Math.sin(o.t * 4) * .025, w2 = .05 + Math.cos(o.t * 4) * .02;
+    tLine(g, .5 - w1, .18, .5 + w1, .18); tLine(g, .5 - w2, .24, .5 + w2, .24);
+    for (const [x, dir] of [[.3, 1], [.7, -1]]) {
+      g.strokeStyle = o.a; g.lineWidth = TOT_LW * .8;
+      tRing(g, x, .29, .145);
+      g.strokeStyle = o.c; g.lineWidth = TOT_LW * .25;
+      tDashed(g, o, [.035, .03], o.t * .3 * dir, () => tRing(g, x, .29, .19));
+      g.fillStyle = o.c;
+      tDot(g, x + o.look * .065, .29 + o.e * .02, .048 * (1 + o.e * .5));
+    }
   } },
   EYE: { h: .46, draw(g, o) {
     g.strokeStyle = o.a; g.lineWidth = TOT_LW * .9;
-    g.beginPath(); g.arc(.5, .23, .19, 0, Math.PI * 2); g.stroke();
+    tRing(g, .5, .23, .19);
+    g.strokeStyle = o.c; g.lineWidth = TOT_LW * .4;
+    for (let i = 0; i < 4; i++) {
+      const a = o.t * .8 + i * Math.PI / 2;
+      tLine(g, .5 + Math.cos(a) * .235, .23 + Math.sin(a) * .235, .5 + Math.cos(a) * .275, .23 + Math.sin(a) * .275);
+    }
+    g.lineWidth = TOT_LW * .25;
+    tDashed(g, o, [.03, .025], -o.t * .4, () => tRing(g, .5, .23, .135));
     g.fillStyle = o.c;
-    g.beginPath(); g.arc(.5 + o.look * .09, .23, .065, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = o.c; g.lineWidth = TOT_LW * .6;
-    tMirror(g, () => tLine(g, .08, .23, .22, .23));
+    tDot(g, .5 + o.look * .09, .23, .065 * (1 + o.e * .6));
+    g.lineWidth = TOT_LW * .6;
+    tMirror(g, () => tLine(g, .03, .23, .2 - o.e * .07, .23));
   } },
   VISOR: { h: .22, draw(g, o) {
     g.strokeStyle = o.c;
-    tLine(g, .28, .05, .72, .05); tLine(g, .35, .17, .65, .17);
+    const seg = (a, b, y, p) => {
+      const gx = a + (b - a) * p, gw = .05;
+      if (gx - gw > a) tLine(g, a, y, gx - gw, y);
+      if (gx + gw < b) tLine(g, gx + gw, y, b, y);
+      g.fillStyle = o.a; g.fillRect(gx - .015, y - .03, .03, .06);
+    };
+    const p = (o.t * .7) % 1;
+    seg(.28, .72, .05, p); seg(.35, .65, .17, 1 - p);
   } },
   MOUTH: { h: .62, draw(g, o) {
     g.strokeStyle = o.c; g.fillStyle = o.c; g.lineWidth = TOT_LW * .6;
-    g.beginPath(); g.arc(.5, .31, .29, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(.5, .27, .18, Math.PI, 0); g.closePath(); g.fill();
-    g.beginPath(); g.arc(.5, .36, .18, 0, Math.PI); g.closePath(); g.fill();
+    tRing(g, .5, .31, .29);
+    g.lineWidth = TOT_LW * .2;
+    tDashed(g, o, [.05, .04], o.t * .2, () => tRing(g, .5, .31, .335));
+    const j = o.e * .06 + Math.sin(o.t * 3) * .008;
+    g.beginPath(); g.arc(.5, .27 - j, .18, Math.PI, 0); g.closePath(); g.fill();
+    g.beginPath(); g.arc(.5, .36 + j, .18, 0, Math.PI); g.closePath(); g.fill();
+    if (j > .02) { g.strokeStyle = o.a; g.lineWidth = TOT_LW * .45; tLine(g, .36, .315, .64, .315); }
   } },
   VENT: { h: .42, draw(g, o) {
-    g.strokeStyle = o.c;
+    const shape = [[.04, .06], [.24, .06], [.33, .2], [.24, .34], [.04, .34]];
     tMirror(g, () => {
-      g.lineWidth = TOT_LW * .6;
-      tPoly(g, [[.04, .06], [.24, .06], [.33, .2], [.24, .34], [.04, .34]]); g.stroke();
-      tLine(g, .11, .12, .11, .28); tLine(g, .18, .12, .18, .28);
+      g.strokeStyle = o.c; g.lineWidth = TOT_LW * .6;
+      tPoly(g, shape); g.stroke();
+      g.save();
+      tPoly(g, shape); g.clip();
+      g.lineWidth = TOT_LW * .35;
+      const off = (o.t * .25) % .07;
+      for (let x = -.15 + off; x < .4; x += .07) tLine(g, x, .34, x + .12, .06);
+      g.restore();
     });
+    g.save();
+    g.translate(.5, .2); g.rotate((o.beat + eOut(o.ph)) * Math.PI * 2 / 3);
     g.fillStyle = o.a;
-    tPoly(g, [[.5, .1], [.42, .26], [.58, .26]]); g.fill();
+    tPoly(g, [[0, -.09], [.08, .05], [-.08, .05]]); g.fill();
+    g.restore();
   } },
   DIAMOND: { h: .42, draw(g, o) {
+    const spin = (o.beat + eOut(o.ph)) * Math.PI / 2;
+    g.save(); g.translate(.5, .21); g.rotate(spin * .5);
     g.strokeStyle = o.c;
-    tPoly(g, [[.5, .02], [.69, .21], [.5, .4], [.31, .21]]); g.stroke();
+    tPoly(g, [[0, -.17], [.17, 0], [0, .17], [-.17, 0]]); g.stroke();
+    g.restore();
+    g.save(); g.translate(.5, .21); g.rotate(-spin);
     g.fillStyle = o.a;
-    tPoly(g, [[.5, .14], [.57, .21], [.5, .28], [.43, .21]]); g.fill();
+    tPoly(g, [[0, -.07], [.07, 0], [0, .07], [-.07, 0]]); g.fill();
+    g.restore();
+    g.fillStyle = o.c;
+    for (let i = 0; i < 4; i++) {
+      const a = o.t * 1.5 + i * Math.PI / 2;
+      tDot(g, .5 + Math.cos(a) * .3, .21 + Math.sin(a) * .17, .018 * (1 + o.e));
+    }
   } },
 };
 const MOD_SWAP = {
@@ -820,6 +912,8 @@ const MOD_SWAP = {
   MOUTH: ['VENT', 'DIAMOND'], VENT: ['MOUTH', 'DIAMOND'], DIAMOND: ['EYE', 'VENT'],
 };
 
+const newMod = (k) => ({ k, flip: 0, pop: 0, inv: false, sp: 0, sv: 0, kickAt: -1, kickStr: 0, draw: 1, go: true });
+
 function makeTotem() {
   const ks = [pick(['EARS', 'EARS', 'DOME', 'CHEVRON'])];
   if (Math.random() < .6) ks.push('ARROWS');
@@ -827,40 +921,98 @@ function makeTotem() {
   if (Math.random() < .5) ks.push('VISOR');
   ks.push(pick(['MOUTH', 'MOUTH', 'VENT', 'DIAMOND']));
   if (Math.random() < .35) ks.push(pick(['VENT', 'DIAMOND', 'CHEVRON']));
-  return ks.map((k) => ({ k, flip: 0, pop: 0, inv: false }));
+  return ks.map(newMod);
 }
-const totemH = (t) => t.reduce((a, m) => a + MODS[m.k].h + TOT_GAP, 0) - TOT_GAP;
+const totemH = (tt) => tt.reduce((a, m) => a + MODS[m.k].h + TOT_GAP, 0) - TOT_GAP;
 
 const TOT = { look: 0, lookT: 0 };
+const beatPhase = () => Math.min(1, (t - A.lastBeat) / (A.bpm ? 60 / A.bpm : .5));
 
-// Draws a totem with its top-left at (x, y), `s` pixels per unit. `upto` limits how many modules show.
-function drawTotem(g, t, x, y, s, upto = t.length) {
+// Hide modules until a beat (or a delay) traces them on.
+function hideTotem(tt, delay = -1) {
+  tt.forEach((m, i) => { m.draw = delay < 0 ? -1 : -(delay + i * .12) * 2.4; m.go = delay >= 0; });
+}
+
+// A kick ripples down the totem: each module's spring fires a little after the one above.
+function kickTotem(tt, str, lag = 0) {
+  tt.forEach((m, i) => { m.kickAt = t + lag + i * .028; m.kickStr = str; });
+}
+
+function hitTotem(tt) {
+  const m = pick(tt), r = Math.random();
+  if (r < .35) m.flip = 1;
+  else if (r < .6) m.inv = !m.inv;
+  else { m.k = pick(MOD_SWAP[m.k]); m.draw = 0; m.go = true; m.pop = 1; }
+}
+
+function stepTotems(list, dt) {
+  for (const tt of list) for (const m of tt) {
+    if (m.kickAt >= 0 && t >= m.kickAt) { m.sv += m.kickStr * 5.5; m.kickAt = -1; }
+    m.sv += (-150 * m.sp - 12 * m.sv) * dt;
+    m.sp += m.sv * dt;
+    m.flip *= Math.exp(-dt * 14);
+    m.pop *= Math.exp(-dt * 10);
+    if (m.go && m.draw < 1) m.draw = Math.min(1, m.draw + dt * 2.4);
+  }
+}
+
+// Draws a totem with its top-left at (x, y), `s` pixels per unit. `scan` (0..1) sweeps a red
+// line down the totem that inverts whatever module it crosses.
+function drawTotem(g, tt, x, y, s, opts = {}) {
+  const { scan = -1 } = opts;
+  const ph = beatPhase(), H = totemH(tt), mid = y + H * s / 2, cx = x + s / 2;
   let yy = y;
-  t.forEach((m, i) => {
-    const M = MODS[m.k];
-    if (i < upto) {
+  const placed = tt.map((m) => {
+    const M = MODS[m.k], top = yy;
+    yy += (M.h + TOT_GAP) * s;
+    const yc = top + M.h * s / 2;
+    return { m, M, top, dy: -m.sp * (yc - mid) * .1 };
+  });
+  const scanY = scan >= 0 ? y + scan * H * s : -1e9;
+
+  g.setLineDash([]);
+  g.lineCap = 'butt';
+  for (let i = 0; i < placed.length - 1; i++) {
+    const a = placed[i], b = placed[i + 1];
+    if (a.m.draw < 1 || b.m.draw < 0) continue;
+    const y1 = a.top + a.M.h * s + a.dy, y2 = b.top + b.dy;
+    const lit = A.beatCount % (placed.length - 1) === i;
+    g.strokeStyle = HEX.white; g.lineWidth = s * .014;
+    tLine(g, cx, y1 + s * .015, cx, y2 - s * .015);
+    g.fillStyle = lit ? HEX.red : HEX.white;
+    tDot(g, cx, (y1 + y2) / 2, s * (lit ? .03 : .016));
+  }
+
+  for (const { m, M, top, dy } of placed) {
+    if (m.draw <= 0) continue;
+    const e = Math.min(1, Math.max(0, m.sp * 2.2));
+    const inv = m.inv !== (Math.abs(top + dy + M.h * s / 2 - scanY) < s * .28);
+    const full = m.draw >= 1, z = 1 + m.pop * .14 + e * .06;
+    const pass = (c, a, ox) => {
       g.save();
-      g.translate(x + s / 2, yy + M.h * s / 2);
-      const z = 1 + m.pop * .14;
+      g.translate(cx + ox, top + dy + M.h * s / 2);
       g.scale(s * z * Math.cos(m.flip * Math.PI), s * z);
       g.translate(-.5, -M.h / 2);
       g.lineWidth = TOT_LW; g.lineJoin = 'miter'; g.lineCap = 'butt';
-      M.draw(g, { c: m.inv ? HEX.red : HEX.white, a: m.inv ? HEX.white : HEX.red, look: TOT.look, beat: A.beatCount });
+      g.setLineDash(full ? [] : [m.draw * 5, 5]);
+      // While a module traces on, its solid fills wait until the outline is mostly drawn.
+      if (!full && m.draw < .6) g.fill = () => {};
+      M.draw(g, { c, a, t, ph, e, look: TOT.look, beat: A.beatCount, full });
+      delete g.fill;
       g.restore();
-    }
-    yy += (M.h + TOT_GAP) * s;
-  });
-}
+    };
+    if (full && e > .3) pass(HEX.red, HEX.red, s * e * .05);
+    pass(inv ? HEX.red : HEX.white, inv ? HEX.white : HEX.red, 0);
+  }
 
-function hitTotem(t) {
-  const m = pick(t), r = Math.random();
-  if (r < .4) m.flip = 1;
-  else if (r < .7) m.inv = !m.inv;
-  else { m.k = pick(MOD_SWAP[m.k]); m.pop = 1; }
-}
-
-function easeTotems(list, dt) {
-  for (const t of list) for (const m of t) { m.flip *= Math.exp(-dt * 14); m.pop *= Math.exp(-dt * 10); }
+  if (scan >= 0) {
+    g.setLineDash([]);
+    g.strokeStyle = HEX.red; g.lineWidth = s * .012;
+    tLine(g, x - s * .18, scanY, x + s * 1.18, scanY);
+    g.lineWidth = s * .03;
+    tLine(g, x - s * .18, scanY - s * .04, x - s * .18, scanY + s * .04);
+    tLine(g, x + s * 1.18, scanY - s * .04, x + s * 1.18, scanY + s * .04);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1237,6 +1389,8 @@ S.BAND = {
 
 const totemCv = $('totem'), totemCtx = totemCv.getContext('2d');
 
+// 32 beats: the hero totem (with mirrored side totems) traces on one module per beat, comes
+// alive for 8 beats, then hands over to columns of totems that tick on the beat.
 S.TOTEMS = {
   len: 32,
   setup() {
@@ -1244,52 +1398,89 @@ S.TOTEMS = {
     setBg('black');
     totemCv.classList.add('on');
     const { aspect } = view();
-    this.layout = Math.random() < .5 ? 'columns' : 'build';
-    this.cols = Array.from({ length: aspect > 1.3 ? 5 : aspect > .8 ? 4 : 3 }, (_, i) => ({
-      totems: [makeTotem(), makeTotem(), makeTotem()], off: rand(0, 2000), dir: i % 2 ? 1 : -1,
-    }));
-    this.cols.forEach((c) => (c.target = c.off));
-    this.hero = makeTotem();
-    this.shown = 0;
     this.beats = 0;
+    this.hero = makeTotem(); hideTotem(this.hero);
+    this.flank = aspect > .8 ? makeTotem() : null;
+    if (this.flank) hideTotem(this.flank);
+    this.cols = null;
+    this.nCols = aspect > 1.3 ? 5 : aspect > .8 ? 4 : 3;
   },
-  text: ['block', 'back', 'white'],
-  update(t, dt) {
+  text: ['none', 'front', 'white'],
+  startColumns() {
+    this.cols = Array.from({ length: this.nCols }, (_, i) => {
+      const totems = [makeTotem(), makeTotem(), makeTotem()];
+      totems.forEach((tt, j) => hideTotem(tt, (Math.abs(i - (this.nCols - 1) / 2)) * .25 + j * .15));
+      const off = rand(0, 1500);
+      return { totems, off, target: off, dir: i % 2 ? 1 : -1 };
+    });
+  },
+  update(time, dt) {
     const { W, H } = view();
     const g = totemCtx;
     g.clearRect(0, 0, W, H);
-    TOT.look += (TOT.lookT - TOT.look) * Math.min(1, dt * 12);
+    TOT.look += (TOT.lookT - TOT.look) * Math.min(1, dt * 14);
+    const ph = beatPhase();
+    const heroes = [this.hero, ...(this.flank ? [this.flank] : [])];
+
     if (A.beat) {
-      // Halfway through, swap layouts so every visit shows both the scroll and the build.
-      if (++this.beats === 16) { this.layout = this.layout === 'build' ? 'columns' : 'build'; this.hero = makeTotem(); this.shown = 0; }
+      this.beats++;
       TOT.lookT = pick([-1, -1, 0, 1, 1]);
-      if (this.layout === 'build') {
-        this.shown++;
-        if (this.shown <= this.hero.length) this.hero[this.shown - 1].pop = 1;
-        else hitTotem(this.hero);
-        if (this.shown > this.hero.length + 6) { this.hero = makeTotem(); this.shown = 0; }
-      } else {
-        for (const c of this.cols) if (Math.random() < .6) hitTotem(pick(c.totems));
+      if (this.beats <= 8) {
+        const next = this.hero.find((m) => m.draw < 0);
+        if (next) { next.go = true; next.draw = 0; }
+        if (this.flank) {
+          const fl = [...this.flank].reverse().find((m) => m.draw < 0);
+          if (fl) { fl.go = true; fl.draw = 0; }
+        }
+      }
+      if (this.beats === 8) heroes.forEach((tt) => tt.forEach((m) => { m.go = true; m.draw = Math.max(m.draw, 0); }));
+      if (this.beats > 8 && this.beats <= 16) {
+        heroes.forEach((tt, i) => kickTotem(tt, A.strength, i * .06));
+        if (this.beats % 2 === 0) hitTotem(this.hero);
+        if (this.flank && this.beats % 2 === 1) hitTotem(this.flank);
+      } else if (this.beats <= 8) kickTotem(this.hero, A.strength * .6);
+      if (this.beats === 16) this.startColumns();
+      if (this.cols) {
+        const sc = W / this.nCols * .6;
+        for (const c of this.cols) {
+          c.target += c.dir * sc * (A.strength > .85 ? 1.1 : .55);
+          c.totems.forEach((tt, j) => kickTotem(tt, A.strength, j * .02));
+          if (Math.random() < .5) hitTotem(pick(c.totems));
+        }
       }
     }
-    if (this.layout === 'build') {
-      easeTotems([this.hero], dt);
-      const h = totemH(this.hero), sc = Math.min(W * .42, H * .9 / h);
-      drawTotem(g, this.hero, (W - sc) / 2, (H - h * sc) / 2, sc, this.shown);
+
+    if (!this.cols) {
+      stepTotems(heroes, dt);
+      const bar = ((this.beats % 4) + ph) / 4;
+      const h = totemH(this.hero), sc = Math.min(W * .34, H * .88 / h);
+      drawTotem(g, this.hero, (W - sc) / 2, (H - h * sc) / 2, sc, { scan: this.beats > 8 ? bar : -1 });
+      if (this.flank) {
+        const fh = totemH(this.flank), fs = Math.min(W * .17, H * .6 / fh);
+        for (const side of [-1, 1]) {
+          g.save();
+          g.translate(W / 2 + side * W * .3, 0);
+          g.scale(side, 1);
+          drawTotem(g, this.flank, -fs / 2, (H - fh * fs) / 2, fs, { scan: this.beats > 8 ? (bar + .5) % 1 : -1 });
+          g.restore();
+        }
+      }
       return;
     }
-    const cw = W / this.cols.length, sc = cw * .62;
-    // Columns tick one step per beat (a double step on hard kicks) and snap there, so the motion
-    // sits on the music rather than drifting with volume.
-    if (A.beat) for (const c of this.cols) c.target += c.dir * sc * (A.strength > .85 ? 1.1 : .55);
+
+    const cw = W / this.nCols, sc = cw * .6;
+    const bar = ((this.beats % 4) + ph) / 4;
     this.cols.forEach((c, i) => {
-      easeTotems(c.totems, dt);
-      const total = c.totems.reduce((a, tt) => a + (totemH(tt) + TOT_SPACER) * sc, 0);
+      stepTotems(c.totems, dt);
       c.off += (c.target - c.off) * Math.min(1, dt * 16);
+      const total = c.totems.reduce((a, tt) => a + (totemH(tt) + TOT_SPACER) * sc, 0);
       let y = ((c.off % total) + total) % total - total;
       const x = cw * i + (cw - sc) / 2;
       while (y < H) {
-        for (const tt of c.totems) { drawTotem(g, tt, x, y, sc); y += (totemH(tt) + TOT_SPACER) * sc; }
+        c.totems.forEach((tt, j) => {
+          drawTotem(g, tt, x, y, sc, { scan: (bar + i * .25 + j * .33) % 1 });
+          y += (totemH(tt) + TOT_SPACER) * sc;
+        });
       }
     });
   },
