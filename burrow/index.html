@@ -28,6 +28,7 @@
   .txt .ln { display: block; padding: 0 .04em; will-change: transform; }
   .txt .ln.inv { background: var(--tc); color: var(--bg); }
   .txt .ln.out { color: transparent; -webkit-text-stroke: var(--sw, 3px) var(--tc); }
+  .txt .ln.hl { background: var(--hlbg); color: #fff; -webkit-text-stroke: 0; padding: .03em .14em 0; margin: .03em 0; }
   .txt .row { display: block; width: 100%; overflow: visible; }
   .txt .row span { display: inline-block; will-change: transform; }
 
@@ -179,6 +180,9 @@ const TRACKS = [
 
 // Every sung line in order, per track (same order as TRACKS).
 const SONG_LINES = [["WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE", "WE'RE FIRST IN LINE", "OUR RIGHTFUL PLACE", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE COMING THROUGH", "WE'RE COMING FAST", "EAT OUR DUST", "WE'RE SCREAMING PAST", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS OUR TIME", "THIS IS OUR TIME", "WE'RE LEAVING YOU BEHIND NOW", "THIS IS OUR TIME"], ["WHEN PEOPLE SAY EASE BACK", "I SAY FUCK THAT", "THE NIGHT IS YOUNG", "COME ON", "LET'S HAVE FUN", "GIRLS AND BOYS", "TONIGHT IS MY OWN", "I DON'T WANNA GO HOME", "I'VE GOT A SHED TO BUILD", "AND A WIFE TO AVOID", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "THERE'S PLENTY OF TIME", "TILL THE LAST TRAIN", "COME ON EVERYBODY", "SAME AGAIN", "NO EXCUSES", "YOU CAN'T GO HOME", "LEAVING ME HERE DRINKING", "ON MY OWN", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "LYING IN BED", "WITH THE LAPTOP OPEN", "MOVING THE MOUSE", "SO IT LOOKS LIKE I'M WORKING", "MY HANGOVER'S SCREAMING", "'NEVER AGAIN!!!'", "FUCK THAT! TONIGHT", "I WANT MORE OF THE SAME", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY"], ["HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHAT DID YOU HEAR?", "WHAT DID I SAY?", "HOW LONG WERE YOU LISTENING", "ANYWAY?", "WAS IT ALL MUFFLED?", "WAS IT ALL CLEAR?", "WHAT DID YOU HEAR?", "WHAT DID YOU HEAR?", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHERE ARE YOU BABE?", "I THOUGHT YOU WERE AT HOME?", "I THOUGHT I HEARD VOICES", "BUT YOU LIVE ALONE", "ER… YEAH,", "THAT MUST HAVE BEEN THE TV", "I GUESS I POCKET CALLED", "ACCIDENTALLY, SORRY", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL"]];
+
+// Lines that always sit on the top layer with a highlight bar so they read over anything.
+const HIGHLIGHT = new Set(["WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE"]);
 
 // Index of the last line of each verse / chorus; these hold on screen until the next line.
 const STANZA_ENDS = [[11, 23, 35, 55], [9, 17, 25, 33, 41, 48], [7, 15, 23, 31, 39]];
@@ -551,7 +555,7 @@ audio.addEventListener('pause', updateHud);
 /* Giant lyric typography                                              */
 /* ------------------------------------------------------------------ */
 
-const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
+const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, hl: false, beats: 0, punch: 0, rot: 0, offs: [], sync: -1 };
 
 const SYNC_KEY = 'burrow-sync-v1';
 let localSync = {};
@@ -582,7 +586,7 @@ function currentLine() {
 function syncText() {
   const L = currentLine();
   if (!L) {
-    if (T.sync >= 0) { T.sync = -1; T.phrase = ''; renderText(); }
+    if (T.sync >= 0) { T.sync = -1; T.phrase = ''; T.hl = false; renderText(); }
     return;
   }
   const ct = audio.currentTime;
@@ -591,9 +595,10 @@ function syncText() {
   if (L.i !== T.sync) {
     T.sync = L.i;
     T.phrase = L.text; T.words = L.words; T.wi = wi; T.full = full;
+    T.hl = HIGHLIGHT.has(L.text);
     renderText();
     T.punch = 1; T.rot = rand(-3, 3);
-  } else if (T.mode === 'slam' && (wi !== T.wi || full !== T.full)) {
+  } else if (T.mode === 'slam' && !T.hl && (wi !== T.wi || full !== T.full)) {
     T.wi = wi; T.full = full;
     renderText();
     T.punch = 1; T.rot = full ? 0 : rand(-3, 3);
@@ -625,12 +630,24 @@ function lineEl(text, cls = '') {
   return s;
 }
 
+const textEl = () => (T.hl ? front : T.el);
+
 function renderText() {
   const { W, H } = view();
-  const el = T.el;
-  el.replaceChildren();
-  el.style.transform = '';
+  back.replaceChildren(); front.replaceChildren();
+  back.style.transform = front.style.transform = '';
   if (T.mode === 'none' || !T.phrase) return;
+  if (T.hl) {
+    const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
+    const spans = lines.map((l) => lineEl(l, 'hl'));
+    front.style.setProperty('--hlbg', bgName === 'red' ? HEX.black : HEX.red);
+    front.append(...spans);
+    const sizes = spans.map((sp) => fitSpan(sp, W * .86, H));
+    const total = sizes.reduce((a, b) => a + b * .95, 0);
+    if (total > H * .86) spans.forEach((sp, i) => (sp.style.fontSize = sizes[i] * H * .86 / total + 'px'));
+    return;
+  }
+  const el = T.el;
   if (T.mode === 'slam' && !T.full) {
     const s = lineEl(T.words[T.wi]);
     el.append(s);
@@ -675,6 +692,7 @@ function textSetup(textMode, layer, color) {
 function textBeat() {
   T.beats++;
   if (T.sync < 0) return;
+  if (T.hl) { T.punch = Math.max(T.punch, .45); return; }
   if (T.mode === 'block' || (T.mode === 'slam' && T.full)) {
     const spans = [...T.el.children];
     spans.forEach((sp) => sp.classList.remove('inv'));
@@ -688,7 +706,10 @@ function textBeat() {
 function textUpdate(dt) {
   T.punch *= Math.exp(-dt * 12);
   const shake = A.kick > .65 ? rand(-1, 1) * A.kick * 14 : 0;
-  if (T.mode === 'marquee') {
+  if (T.hl) {
+    front.style.setProperty('--hlbg', bgName === 'red' ? HEX.black : HEX.red);
+    front.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .08})`;
+  } else if (T.mode === 'marquee') {
     const speed = 90 + A.level * 700 + A.kick * 500;
     [...T.el.querySelectorAll('.ln')].forEach((s, i) => {
       const half = s.getBoundingClientRect().width / 2;
