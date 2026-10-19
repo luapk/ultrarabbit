@@ -23,6 +23,31 @@
   #tr { right: 16px; text-align: right; }
   #tl b { font-weight: 600; }
   #trk { position: fixed; left: 16px; bottom: max(16px, env(safe-area-inset-bottom)); font-size: 11px; letter-spacing: .18em; background: #000; padding: 6px 8px; z-index: 2; }
+  #recbar {
+    position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    z-index: 3; display: none; flex-direction: column; align-items: center; gap: 8px;
+  }
+  body.live #recbar { display: flex; }
+  #rec {
+    width: 68px; height: 68px; border-radius: 50%; border: 4px solid #fff; background: transparent;
+    display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  #rec i { display: block; width: 50px; height: 50px; border-radius: 50%; background: var(--red); transition: all .15s; }
+  #rec.on i { width: 26px; height: 26px; border-radius: 3px; }
+  #rectime { font-size: 11px; letter-spacing: .18em; background: #000; padding: 4px 8px; visibility: hidden; }
+  #rec.on + #rectime { visibility: visible; color: var(--red); }
+  #sheet {
+    position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: rgba(0,0,0,.92); padding: 16px;
+  }
+  #sheet.on { display: flex; }
+  #sheet video { max-width: 100%; max-height: 62vh; background: #000; outline: 2px solid var(--red); }
+  #sheet .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #sheet button, #sheet a {
+    font: 600 13px "Fira Code", monospace; letter-spacing: .14em; padding: 12px 16px; border: 0; cursor: pointer;
+    background: var(--red); color: #000; text-decoration: none;
+  }
+  #sheet .ghost { background: #000; color: #fff; outline: 1px solid #fff; }
   #gate {
     position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 22px; background: #000; cursor: pointer; text-align: center; padding: 16px;
@@ -41,6 +66,18 @@
 <div id="tl" class="tag"><b>ULTRARABBIT</b> // MIRROR</div>
 <div id="tr" class="tag">LOADING</div>
 <div id="trk">WORKING FROM HOME</div>
+<div id="recbar">
+  <button id="rec" aria-label="Record"><i></i></button>
+  <div id="rectime">● 0:00</div>
+</div>
+<div id="sheet">
+  <video id="preview" playsinline loop muted autoplay></video>
+  <div class="row">
+    <a id="save" download>SAVE</a>
+    <button id="share" hidden>SHARE</button>
+    <button id="discard" class="ghost">DISCARD</button>
+  </div>
+</div>
 
 <div id="gate">
   <img src="/logo.jpg" alt="ULTRARABBIT">
@@ -147,7 +184,7 @@ function track(now) {
 const audio = new Audio('/WorkingFromHome.mp3');
 audio.loop = true;
 audio.preload = 'auto';
-let actx = null, analyser = null, data = null;
+let actx = null, analyser = null, data = null, recDest = null;
 const A = { bass: 0, beat: false, strength: 0, kick: 0, beatCount: 0, lastBeat: -10, bpm: 0 };
 const hist = [], ibis = [];
 
@@ -160,6 +197,8 @@ function startAudio() {
   const src = actx.createMediaElementSource(audio);
   src.connect(analyser);
   src.connect(actx.destination);
+  recDest = actx.createMediaStreamDestination();
+  src.connect(recDest);
   actx.resume();
   return audio.play();
 }
@@ -266,19 +305,18 @@ const FX = {
       fx.outer.forEach((m, i) => kickPiece(m, t, i * .02));
       fx.inner.forEach((m, i) => kickPiece(m, t, .05 + i * .02));
     },
-    draw(fx, t, dt, ph, k) {
+    draw(fx, t, dt, ph) {
       revealOverTime(fx, [...fx.outer, ...fx.inner], dt, .28);
       stepPieces([...fx.outer, ...fx.inner], t, dt);
       fx.a += (fx.at - fx.a) * Math.min(1, dt * 14);
       fx.b -= dt * (1.2 + A.kick * 4);
-      const sq = 1 - k * .85;
       fx.outer.forEach((m, i) => {
         const a = fx.a + i * Math.PI * 2 / 10;
-        drawPiece(m, Math.cos(a) * .9 * sq, .2 + Math.sin(a) * 1.1 * sq, .62 * (1 - k * .7), t, ph);
+        drawPiece(m, Math.cos(a) * .9, .2 + Math.sin(a) * 1.1, .62, t, ph);
       });
       fx.inner.forEach((m, i) => {
         const a = fx.b + i * Math.PI * 2 / 6;
-        drawPiece(m, Math.cos(a) * .55 * sq, .2 + Math.sin(a) * .7 * sq, .3 * (1 - k * .7), t, ph, a);
+        drawPiece(m, Math.cos(a) * .55, .2 + Math.sin(a) * .7, .3, t, ph, a);
       });
     },
   },
@@ -300,17 +338,16 @@ const FX = {
       fx.crown.forEach((m, i) => kickPiece(m, t, i * .04));
       if (fx.n % 2 === 0) { const m = totemPick(totemPick(fx.cols)); m.k = totemPick(ALL_KEYS); m.draw = 0; }
     },
-    draw(fx, t, dt, ph, k, P) {
+    draw(fx, t, dt, ph, P) {
       const all = [...fx.cols.flat(), ...fx.crown];
       revealOverTime(fx, all, dt, .4);
       stepPieces(all, t, dt);
-      const gather = 1 - k * .8;
       fx.cols.forEach((col, ci) => {
         const side = ci ? 1 : -1;
-        col.forEach((m, i) => drawPiece(m, side * .98 * gather, (-.95 + i * .52) * gather + .2 + Math.sin(t * 6 + i) * .015, .46 * gather, t, ph));
+        col.forEach((m, i) => drawPiece(m, side * .98, -.75 + i * .52 + Math.sin(t * 6 + i) * .015, .46, t, ph));
       });
       const fy = P ? P.forehead[1] : -.6;
-      fx.crown.forEach((m, i) => drawPiece(m, (i - 1) * .5 * gather, (fy - .55) * gather, (i === 1 ? .7 : .4) * gather, t, ph));
+      fx.crown.forEach((m, i) => drawPiece(m, (i - 1) * .5, fy - .55, i === 1 ? .7 : .4, t, ph));
     },
   },
   // Every beat fires a wave of pieces out of the face.
@@ -323,11 +360,11 @@ const FX = {
         fx.p.push(piece(totemPick(ALL_KEYS), { born: t, a, spd: rand(1.6, 2.6), spin: rand(-6, 6), inv: Math.random() < .3 }));
       }
     },
-    draw(fx, t, dt, ph, k) {
+    draw(fx, t, dt, ph) {
       fx.p = fx.p.filter((m) => t - m.born < 1.3);
       for (const m of fx.p) {
-        const life = t - m.born, r = .25 + eOut(Math.min(1, life / 1.1)) * m.spd * (1 - k);
-        drawPiece(m, Math.cos(m.a) * r, .2 + Math.sin(m.a) * r * 1.15, (.25 + life * .45) * (1 - k * .8), t, ph, life * m.spin * .3);
+        const life = t - m.born, r = .25 + eOut(Math.min(1, life / 1.1)) * m.spd;
+        drawPiece(m, Math.cos(m.a) * r, .2 + Math.sin(m.a) * r * 1.15, .25 + life * .45, t, ph, life * m.spin * .3);
         m.pop *= Math.exp(-dt * 9);
       }
     },
@@ -347,11 +384,11 @@ const FX = {
       sl.m = piece(totemPick(sl.keys), { draw: 0, pop: 1, flip: 1 });
       fx.slots.forEach((s, i) => kickPiece(s.m, t, i * .03));
     },
-    draw(fx, t, dt, ph, k, P) {
+    draw(fx, t, dt, ph, P) {
       if (!P) return;
       stepPieces(fx.slots.map((s) => s.m), t, dt);
       const jolt = A.kick > .7 ? (Math.random() - .5) * .06 : 0;
-      fx.slots.forEach((sl, i) => drawPiece(sl.m, (i % 2 ? jolt : -jolt), sl.y(P), sl.w * (1 - k * .3), t, ph));
+      fx.slots.forEach((sl, i) => drawPiece(sl.m, (i % 2 ? jolt : -jolt), sl.y(P), sl.w, t, ph));
     },
   },
 };
@@ -522,10 +559,10 @@ function drawRabbit(P, d, t, ph, red = false) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Sequence: intro totems -> rabbit (10s) -> random totem fx -> rabbit… */
+/* Sequence: intro totems -> rabbit (10s) -> random totem fx -> rabbit…  */
 /* ------------------------------------------------------------------ */
 
-const TIMES = { intro: 12, converge: 2.2, trace: 2.2, rabbit: 10, untrace: .6, fx: 7 };
+const TIMES = { intro: 12, trace: 2.2, rabbit: 10, untrace: .6, fx: 7 };
 const seq = { name: 'intro', start: 0, fx: null, fxName: 'ORBIT' };
 
 function enter(name, t) {
@@ -539,12 +576,11 @@ function enter(name, t) {
 
 function advance(t) {
   const el = t - seq.start;
-  if (seq.name === 'intro' && el > TIMES.intro) enter('converge', t);
-  else if (seq.name === 'converge' && el > TIMES.converge) enter('trace', t);
+  if (seq.name === 'intro' && el > TIMES.intro) enter('trace', t);
   else if (seq.name === 'trace' && el > TIMES.trace) enter('rabbit', t);
   else if (seq.name === 'rabbit' && el > TIMES.rabbit) enter('untrace', t);
   else if (seq.name === 'untrace' && el > TIMES.untrace) enter('fx', t);
-  else if (seq.name === 'fx' && el > TIMES.fx) enter('converge', t);
+  else if (seq.name === 'fx' && el > TIMES.fx) enter('trace', t);
 }
 
 function rabbitProgress(t) {
@@ -576,7 +612,7 @@ function frame(now) {
   advance(clock);
   const ph = beatPhase(t);
   if (A.beat) {
-    if (seq.fx) FX[seq.fxName].beat(seq.fx, t);
+    if (seq.name === 'intro' || seq.name === 'fx') FX[seq.fxName].beat(seq.fx, t);
     rab.kickAt = t;
     rab.sat.forEach((m, i) => kickPiece(m, t, i * .04));
   }
@@ -610,12 +646,7 @@ function frame(now) {
   g.scale(s, s);
   g.lineJoin = 'miter'; g.lineCap = 'butt';
 
-  const el = clock - seq.start;
-  if (seq.fx && (seq.name === 'intro' || seq.name === 'fx' || seq.name === 'converge')) {
-    const k = seq.name === 'converge' ? eOut(clamp(el / TIMES.converge, 0, 1)) : 0;
-    if (k < .98) FX[seq.fxName].draw(seq.fx, t, dt, ph, k, P);
-    if (seq.name === 'converge' && el > TIMES.converge * .95) seq.fx = null;
-  }
+  if (seq.name === 'intro' || seq.name === 'fx') FX[seq.fxName].draw(seq.fx, t, dt, ph, P);
   const d = rabbitProgress(clock);
   if (found && d) {
     const e = clamp(rab.sp * 2, 0, 1);
@@ -626,9 +657,75 @@ function frame(now) {
   }
   g.restore();
 
+  if (recorder && recorder.state === 'recording') {
+    g.font = '600 12px "Fira Code", monospace';
+    const label = 'ULTRARABBIT // WORKING FROM HOME', w = g.measureText(label).width;
+    g.fillStyle = BLACK; g.fillRect(W - w - 30, H - 40, w + 16, 24);
+    g.fillStyle = WHITE; g.textBaseline = 'middle'; g.textAlign = 'left';
+    g.fillText(label, W - w - 22, H - 28);
+    const sec = Math.floor((performance.now() - recStart) / 1000);
+    $('rectime').textContent = `● ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    if (sec >= REC_MAX) stopRecording();
+  }
+
   $('tr').textContent = !landmarker ? 'LOADING' : found ? (A.bpm ? `BPM ~${A.bpm}` : 'LOCKED') : 'SHOW YOUR FACE';
 }
 requestAnimationFrame(frame);
+
+/* ------------------------------------------------------------------ */
+/* Recording: the canvas (camera + overlay) plus the song              */
+/* ------------------------------------------------------------------ */
+
+const REC_MAX = 60;
+const REC_TYPE = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+  .find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+let recorder = null, recChunks = [], recStart = 0, recUrl = null, recFile = null;
+
+function startRecording() {
+  const stream = canvas.captureStream(30);
+  if (recDest) recDest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+  recorder = new MediaRecorder(stream, REC_TYPE ? { mimeType: REC_TYPE, videoBitsPerSecond: 6e6 } : undefined);
+  recChunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+  recorder.onstop = showRecording;
+  recorder.start(250);
+  recStart = performance.now();
+  $('rec').classList.add('on');
+}
+
+function stopRecording() {
+  if (!recorder || recorder.state !== 'recording') return;
+  recorder.stop();
+  $('rec').classList.remove('on');
+}
+
+function showRecording() {
+  const type = recorder.mimeType || REC_TYPE || 'video/webm';
+  const blob = new Blob(recChunks, { type });
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const name = `ultrarabbit-mirror-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${ext}`;
+  recUrl = URL.createObjectURL(blob);
+  recFile = new File([blob], name, { type });
+  $('preview').src = recUrl;
+  $('save').href = recUrl;
+  $('save').download = name;
+  $('share').hidden = !(navigator.canShare && navigator.canShare({ files: [recFile] }));
+  $('sheet').classList.add('on');
+}
+
+function closeSheet() {
+  $('sheet').classList.remove('on');
+  $('preview').removeAttribute('src');
+  if (recUrl) URL.revokeObjectURL(recUrl);
+  recUrl = recFile = null;
+}
+
+$('rec').addEventListener('click', () => {
+  if (!REC_TYPE && !window.MediaRecorder) { $('tr').textContent = 'RECORDING NOT SUPPORTED'; return; }
+  if (recorder && recorder.state === 'recording') stopRecording(); else startRecording();
+});
+$('share').addEventListener('click', () => navigator.share({ files: [recFile], title: 'ULTRARABBIT' }).catch(() => {}));
+$('discard').addEventListener('click', closeSheet);
 
 $('gate').addEventListener('click', async () => {
   $('note').textContent = 'Starting…';
@@ -643,6 +740,7 @@ $('gate').addEventListener('click', async () => {
   }
   startAudio().catch(() => {});
   $('gate').classList.add('gone');
+  document.body.classList.add('live');
   enter('intro', performance.now() / 1000);
   running = true;
   await ready;
