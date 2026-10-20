@@ -1290,32 +1290,6 @@ S.TOTEM_COLUMNS = totemScene({
   },
 });
 
-// A lineup across the screen: kicks travel left to right, one totem turns red per beat.
-S.TOTEM_ROW = totemScene({
-  init({ aspect }) {
-    const n = aspect > 1.3 ? 7 : aspect > .8 ? 5 : 3;
-    this.row = Array.from({ length: n }, () => makeTotem());
-    this.row.forEach((tt, i) => hideTotem(tt, Math.abs(i - (n - 1) / 2) * .12));
-    this.red = -1;
-  },
-  onBeat() {
-    this.row.forEach((tt, i) => kickTotem(tt, A.strength, i * .045));
-    if (this.red >= 0) this.row[this.red].forEach((m) => (m.inv = false));
-    this.red = (this.beats - 1) % this.row.length;
-    this.row[this.red].forEach((m) => (m.inv = true));
-    if (this.beats % 2 === 0) hitTotem(pick(this.row));
-  },
-  draw(g, W, H, dt, ph) {
-    stepTotems(this.row, dt);
-    const n = this.row.length, cw = W / n, base = H * .9;
-    const sc = Math.min(cw * .7, ...this.row.map((tt) => H * .78 / totemH(tt)));
-    this.row.forEach((tt, i) => {
-      const h = totemH(tt) * sc;
-      drawTotem(g, tt, cw * i + (cw - sc) / 2, base - h, sc, { scan: ((this.beats + ph) / 2 + i / n) % 1 });
-    });
-  },
-});
-
 // One huge totem; the view drops one module per beat and snaps there.
 S.TOTEM_DIVE = totemScene({
   init({ W, H }) {
@@ -1466,7 +1440,7 @@ S.RUN_HERD = totemScene({
 });
 
 const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE'];
-const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_ROW', 'TOTEM_DIVE'];
+const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_DIVE'];
 const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN', 'RUN_HERD'];
 const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES];
 // Number keys: 1-5 mask scenes, 6 band clip, 7 steps through the totem sequences, 8 the runs.
