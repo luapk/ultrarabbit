@@ -133,7 +133,7 @@
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–7 SCENE · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–8 SCENE · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
 
@@ -166,6 +166,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="/totems.js"></script>
+<script src="/rabbit-run.js"></script>
 <script>
 (() => {
 'use strict';
@@ -1322,12 +1323,132 @@ S.TOTEM_DIVE = totemScene({
   },
 });
 
+
+/* ------------------------------------------------------------------ */
+/* Running rabbit: the hand-drawn cycle in three graphic treatments    */
+/* ------------------------------------------------------------------ */
+
+const PHI = (1 + Math.sqrt(5)) / 2;
+const RUN_COLS = [HEX.red, HEX.black, HEX.white];
+// Four frames per beat: one stride every two beats, close to the drawing's own 10fps.
+const runFrame = (ph, offset = 0) => (((Math.floor((A.beatCount + ph) * 4) + offset) % 8) + 8) % 8;
+
+// Russian dolls: each rabbit holds a smaller one (x 1/phi) running a couple of frames behind,
+// and the view zooms in one doll per bar, forever.
+S.RUN_DOLL = totemScene({
+  init() { this.punch = 0; },
+  onBeat() { this.punch = 1; },
+  draw(g, W, H, dt, ph) {
+    this.punch *= Math.exp(-dt * 8);
+    const beats = A.beatCount + ph, gen = Math.floor(beats / 4), u = (beats / 4) % 1;
+    const big = Math.max(W / RUN_W, H) * 1.7 * (1 + this.punch * .03);
+    g.fillStyle = RUN_COLS[(gen + 2) % 3];
+    g.fillRect(0, 0, W, H);
+    for (let k = 0; ; k++) {
+      const h = big * PHI ** (u - k);
+      if (h < 5) break;
+      const fill = RUN_COLS[(k + gen) % 3], line = RUN_COLS[(k + gen + 1) % 3];
+      drawRun(g, runFrame(ph, -2 * k), W / 2, H / 2 + h * .06, h, line, fill, (k + gen) % 2 === 1);
+    }
+  },
+});
+
+// Golden mean: the golden-rectangle construction, a rabbit in every square running its arc of
+// the spiral. The view zooms into the eye by phi and turns 90 degrees per bar, which is seamless
+// because each square is the last one shrunk by 1/phi and turned a quarter.
+S.RUN_GOLDEN = totemScene({
+  init({ W, H }) {
+    const h0 = Math.min(H, W / PHI), w0 = h0 * PHI;
+    const build = (x, y, w, hh, i0, n) => {
+      const sq = [];
+      for (let i = i0; i < i0 + n; i++) {
+        const side = (i & 1) ? w : hh, q = ((i % 4) + 4) % 4;
+        if (q === 0) { sq.push({ x, y, s: side, cx: x + side, cy: y + side, a0: Math.PI, i }); x += side; w -= side; }
+        else if (q === 1) { sq.push({ x, y, s: side, cx: x, cy: y + side, a0: Math.PI * 1.5, i }); y += side; hh -= side; }
+        else if (q === 2) { sq.push({ x: x + w - side, y, s: side, cx: x + w - side, cy: y, a0: 0, i }); w -= side; }
+        else { sq.push({ x, y: y + hh - side, s: side, cx: x + w, cy: y + hh - side, a0: Math.PI / 2, i }); hh -= side; }
+      }
+      return { sq, eye: { x: x + w / 2, y: y + hh / 2 } };
+    };
+    const x0 = (W - w0) / 2, y0 = (H - h0) / 2;
+    this.eye = build(x0, y0, w0, h0, 0, 40).eye;
+    // Start four squares further out (phi^4 larger about the same eye) so the pattern runs off
+    // every edge of the screen and the bar-to-bar wrap is seamless.
+    const k = PHI ** 4;
+    this.sq = build(this.eye.x + (x0 - this.eye.x) * k, this.eye.y + (y0 - this.eye.y) * k, w0 * k, h0 * k, -4, 30).sq;
+  },
+  onBeat() {},
+  draw(g, W, H, dt, ph) {
+    const beats = A.beatCount + ph, gen = Math.floor(beats / 4), u = eOut((beats / 4) % 1);
+    g.fillStyle = RUN_COLS[(gen + 2) % 3];
+    g.fillRect(0, 0, W, H);
+    g.save();
+    g.translate(this.eye.x, this.eye.y);
+    g.rotate(-u * Math.PI / 2);
+    g.scale(PHI ** u, PHI ** u);
+    g.translate(-this.eye.x, -this.eye.y);
+    const lw = Math.max(1, Math.min(W, H) * .003) / PHI ** u;
+    for (const q of this.sq) {
+      if (q.s < 2) break;
+      const col = RUN_COLS[(q.i + gen + 12) % 3], ink = RUN_COLS[(q.i + gen + 13) % 3];
+      g.fillStyle = col;
+      g.fillRect(q.x, q.y, q.s, q.s);
+      g.strokeStyle = ink; g.lineWidth = lw;
+      g.beginPath(); g.arc(q.cx, q.cy, q.s, q.a0, q.a0 + Math.PI / 2); g.stroke();
+      // The rabbit runs along its quarter-arc of the spiral, nose following the curve.
+      const p = ((beats / 2 + q.i * .25) % 1);
+      const a = q.a0 + p * Math.PI / 2, r = q.s * .7;
+      g.save();
+      g.translate(q.cx + Math.cos(a) * r, q.cy + Math.sin(a) * r);
+      g.rotate(a + Math.PI / 2);
+      drawRun(g, runFrame(ph, q.i + 8), 0, 0, q.s * .44, ink);
+      g.restore();
+    }
+    g.restore();
+  },
+});
+
+// Repetition and scale: bands each 1/phi the height of the one below, packed with rabbits that
+// travel one stride per cycle (so their feet stay planted), rows alternating direction.
+S.RUN_HERD = totemScene({
+  init({ H }) {
+    this.rows = [];
+    let y = H;
+    for (let k = 0; y > 0; k++) {
+      const h = H * .4 * (1 / PHI) ** k;
+      y -= h;
+      this.rows.push({ y, h: Math.max(h, 3), off: rand(0, 1000), dir: k % 2 ? -1 : 1, k });
+      if (h < 3) { this.rows[this.rows.length - 1].y = 0; this.rows[this.rows.length - 1].h = y + h; break; }
+    }
+    this.flash = -1;
+  },
+  onBeat() { this.flash = Math.floor(Math.random() * this.rows.length); },
+  draw(g, W, H, dt, ph) {
+    const ibi = A.bpm ? 60 / A.bpm : .5;
+    for (const r of this.rows) {
+      const inv = r.k === this.flash && ph < .5;
+      const bg = RUN_COLS[(r.k + (inv ? 1 : 0)) % 3], ink = RUN_COLS[(r.k + (inv ? 2 : 1)) % 3];
+      g.fillStyle = bg;
+      g.fillRect(0, r.y, W, r.h + 1);
+      const rh = r.h * .82, gap = RUN_W * rh * 1.08;
+      r.off += r.dir * gap / (2 * ibi) * dt;
+      const start = ((r.off % gap) + gap) % gap - gap;
+      let n = 0;
+      for (let x = start; x < W + gap; x += gap, n++) {
+        drawRun(g, runFrame(ph, (n * 3 + r.k) % 8), x, r.y + r.h / 2, rh, ink, null, r.dir < 0);
+      }
+    }
+  },
+});
+
 const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE'];
 const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_ROW', 'TOTEM_DIVE'];
-const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES];
-// Number keys: 1-5 mask scenes, 6 band clip, 7 steps through the totem sequences.
-const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM'];
-const isTotem = (n) => n.startsWith('TOTEM_');
+const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN', 'RUN_HERD'];
+const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES];
+// Number keys: 1-5 mask scenes, 6 band clip, 7 steps through the totem sequences, 8 the runs.
+const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM', 'RUN'];
+// Scenes drawn on the flat 2D canvas rather than in 3D.
+const isFlat = (n) => n.startsWith('TOTEM_') || n.startsWith('RUN_');
 
 function nextScene() {
   let n;
@@ -1343,7 +1464,7 @@ function setScene(name, keepText = false) {
   sceneName = name;
   sceneBeat = A.beatCount;
   if (name !== 'BAND') { bandVid.classList.remove('on'); bandVid.pause(); }
-  if (!isTotem(name)) totemCv.classList.remove('on');
+  if (!isFlat(name)) totemCv.classList.remove('on');
   resetMasks();
   if (!keepText) textSetup(...S[name].text);
   S[name].setup();
@@ -1396,7 +1517,8 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowLeft') { ensureCtx(); actx.resume(); playTrack(cur - 1); }
   else if (e.key >= '1' && e.key <= String(KEYS.length)) {
     const k = KEYS[+e.key - 1];
-    setScene(k === 'TOTEM' ? TOTEM_SCENES[(TOTEM_SCENES.indexOf(sceneName) + 1) % TOTEM_SCENES.length] : k);
+    const cycle = (list) => list[(list.indexOf(sceneName) + 1) % list.length];
+    setScene(k === 'TOTEM' ? cycle(TOTEM_SCENES) : k === 'RUN' ? cycle(RUN_SCENES) : k);
   }
   else if (e.key === 'm' || e.key === 'M') { if (gateOpen) enter(true); else if (mode === 'mic') stopMic(); else startMic(); }
   else if (e.key === 'f' || e.key === 'F') {
@@ -1460,7 +1582,7 @@ function frame() {
     } else {
       textBeat();
       if (A.beatCount % 32 === 0) fever(rand(10, 16));
-      else if (!isTotem(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
+      else if (!isFlat(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
       else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
     }
   }
