@@ -21,7 +21,10 @@ function tPoly(g, pts, close = true) {
 function tLine(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
 function tMirror(g, fn) { fn(); g.save(); g.translate(1, 0); g.scale(-1, 1); fn(); g.restore(); }
 function tRing(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); }
-function tDot(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+// While a piece traces on its solid fills wait; TFILL.off skips them (set by the caller).
+const TFILL = { off: false };
+function tFill(g) { if (!TFILL.off) g.fill(); }
+function tDot(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); tFill(g); }
 function tDashed(g, o, pattern, offset, fn) {
   if (!o.full) return;
   g.save(); g.setLineDash(pattern); g.lineDashOffset = offset; fn(); g.restore();
@@ -52,7 +55,7 @@ const MODS = {
     for (let k = 0; k < 4; k++) {
       const y = .03 + k * .16 + .16 - lift;
       g.fillStyle = (k + o.beat) % 3 === 0 ? o.a : o.c;
-      tPoly(g, [[.5, y], [.5 - w, y + .13], [.5 + w, y + .13]]); g.fill();
+      tPoly(g, [[.5, y], [.5 - w, y + .13], [.5 + w, y + .13]]); tFill(g);
     }
     g.restore();
   } },
@@ -69,7 +72,7 @@ const MODS = {
     tDashed(g, o, [.04, .035], -o.t * .25, () => { g.beginPath(); g.arc(.5, .56, .24, Math.PI, 0); g.stroke(); });
     g.lineWidth = TOT_LW;
     const sh = .15 + o.e * .14;
-    tPoly(g, [[.5, .17 - sh], [.41, .17], [.59, .17]]); g.fill();
+    tPoly(g, [[.5, .17 - sh], [.41, .17], [.59, .17]]); tFill(g);
     tMirror(g, () => tLine(g, .1, .2, .1, .56));
   } },
   CHEVRON: { h: .34, draw(g, o) {
@@ -136,8 +139,8 @@ const MODS = {
     g.lineWidth = TOT_LW * .2;
     tDashed(g, o, [.05, .04], o.t * .2, () => tRing(g, .5, .31, .335));
     const j = o.e * .06 + Math.sin(o.t * 3) * .008;
-    g.beginPath(); g.arc(.5, .27 - j, .18, Math.PI, 0); g.closePath(); g.fill();
-    g.beginPath(); g.arc(.5, .36 + j, .18, 0, Math.PI); g.closePath(); g.fill();
+    g.beginPath(); g.arc(.5, .27 - j, .18, Math.PI, 0); g.closePath(); tFill(g);
+    g.beginPath(); g.arc(.5, .36 + j, .18, 0, Math.PI); g.closePath(); tFill(g);
     if (j > .02) { g.strokeStyle = o.a; g.lineWidth = TOT_LW * .45; tLine(g, .36, .315, .64, .315); }
   } },
   VENT: { h: .42, draw(g, o) {
@@ -155,7 +158,7 @@ const MODS = {
     g.save();
     g.translate(.5, .2); g.rotate((o.beat + eOut(o.ph)) * Math.PI * 2 / 3);
     g.fillStyle = o.a;
-    tPoly(g, [[0, -.09], [.08, .05], [-.08, .05]]); g.fill();
+    tPoly(g, [[0, -.09], [.08, .05], [-.08, .05]]); tFill(g);
     g.restore();
   } },
   DIAMOND: { h: .42, draw(g, o) {
@@ -166,7 +169,7 @@ const MODS = {
     g.restore();
     g.save(); g.translate(.5, .21); g.rotate(-spin);
     g.fillStyle = o.a;
-    tPoly(g, [[0, -.07], [.07, 0], [0, .07], [-.07, 0]]); g.fill();
+    tPoly(g, [[0, -.07], [.07, 0], [0, .07], [-.07, 0]]); tFill(g);
     g.restore();
     g.fillStyle = o.c;
     for (let i = 0; i < 4; i++) {

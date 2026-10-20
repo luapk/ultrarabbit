@@ -30,8 +30,9 @@
   .txt .ln.hl { background: var(--hlbg); color: #fff; -webkit-text-stroke: 0; padding: .03em .14em 0; margin: .03em 0; }
 
   #grain {
-    opacity: .09; mix-blend-mode: normal;
+    inset: -160px; opacity: .09;
     background-repeat: repeat;
+    will-change: transform;
   }
   #scan { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
   #flash { background: #fff; opacity: 0; }
@@ -172,9 +173,9 @@
 'use strict';
 
 const TRACKS = [
-  { title: 'THIS IS WHO WE ARE', src: '/ThisIsWhoWeAre.mp3' },
-  { title: 'WORKING FROM HOME', src: '/WorkingFromHome.mp3' },
-  { title: 'POCKET CALL', src: '/PocketCall.mp3' },
+  { title: 'THIS IS WHO WE ARE', src: '/media/ThisIsWhoWeAre-192.mp3' },
+  { title: 'WORKING FROM HOME', src: '/media/WorkingFromHome-192.mp3' },
+  { title: 'POCKET CALL', src: '/media/PocketCall-192.mp3' },
 ];
 
 // Every sung line in order, per track (same order as TRACKS).
@@ -190,9 +191,20 @@ const REFRAIN = new Set(['THIS IS WHO WE ARE NOW', 'THIS IS WHAT WE DO']);
 // Index of the last line of each verse / chorus.
 const STANZA_ENDS = [[11, 23, 35, 55], [9, 17, 25, 33, 41, 48], [7, 15, 23, 31, 39]];
 
-// Start time in seconds of each SONG_LINES entry, recorded with sync mode (Y). null = not synced yet.
+// Start time in seconds of each SONG_LINES entry. null = not synced yet.
+// THIS IS WHO WE ARE is locked to its beat grid (146.728 BPM, first beat 0.0204s, measured from
+// the audio and stable to +/-5ms over the whole song): every line starts on a bar, with lines
+// sung from a pickup 1.5 beats before the bar line except "THIS IS WHAT WE DO", which lands on it.
 const BAKED_SYNC = [
-  [29.42,  31.09,  32.71,  34.36,  36.04,  37.62,  39.23,  40.81,  42.79,  44.17,  45.77,  47.35,  55.66,  57.11,  58.83,  60.3,  62.03,  63.55,  65.27,  67.09,  68.59,  70.22,  72.04,  73.39,  81.79,  83.2,  85.08,  86.43,  88.2,  89.78,  91.34,  93.08,  94.78,  96.46,  98.07,  99.64,  127.7,  133.21,  133.86,  135.36,  136.52,  137.91,  138.85,  141.15,  142.19,  144.14,  145.56,  154.64,  155.43,  157.04,  158.39,  165.41,  194,  194.94,  197.41,  198.25],
+  [28.849,  30.485,  32.121,  33.756,  35.392,  37.028,  38.663,  40.299,  41.935,  44.184,  45.206,  47.455,  55.02,  56.656,  58.292,  59.927,  61.563,  63.199,  64.834,  66.47,  68.106,  70.355,  71.377,  73.626,  81.191,  82.827,  84.462,  86.098,  87.734,  89.369,  91.005,  92.641,  94.276,  96.526,  97.548,  99.797,  126.99,  128.626,  130.261,  131.897,  133.533,  135.168,  136.804,  138.44,  140.076,  142.325,  143.347,  145.596,  153.161,  154.797,  156.432,  158.068,  194.053,  194.871,  197.324,  198.347],
+  null,
+  null,
+];
+
+// Beat grids for tracks that have one: sync-mode taps snap to the bar, then shift by the line's
+// pickup, so tapping only has to be within half a bar to come out exact.
+const TRACK_GRID = [
+  { bpm: 146.728, phase: .0204, pickup: (text) => (text === 'THIS IS WHAT WE DO' ? 0 : -1.5) },
   null,
   null,
 ];
@@ -561,7 +573,8 @@ audio.addEventListener('pause', updateHud);
 
 const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, hl: false, beats: 0, punch: 0, rot: 0, sync: -1 };
 
-const SYNC_KEY = 'burrow-sync-v1';
+// v2: v1 taps predate the beat-grid timings and would override them.
+const SYNC_KEY = 'burrow-sync-v2';
 let localSync = {};
 try { localSync = JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch (e) { localSync = {}; }
 const timingsFor = (i) => (localSync[i] && localSync[i].length ? localSync[i] : BAKED_SYNC[i]);
@@ -637,7 +650,6 @@ function lineEl(text, cls = '') {
   return s;
 }
 
-const textEl = () => (T.hl ? front : T.el);
 
 function renderText() {
   const { W, H } = view();
@@ -647,7 +659,8 @@ function renderText() {
   if (T.hl) {
     const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
     const spans = lines.map((l) => lineEl(l, 'hl'));
-    front.style.setProperty('--hlbg', bgName === 'red' ? HEX.black : HEX.red);
+    T.hlbg = bgName === 'red' ? HEX.black : HEX.red;
+    front.style.setProperty('--hlbg', T.hlbg);
     front.append(...spans);
     const sizes = spans.map((sp) => fitSpan(sp, W * .86, H));
     const total = sizes.reduce((a, b) => a + b * .95, 0);
@@ -699,7 +712,8 @@ function textUpdate(dt) {
   T.punch *= Math.exp(-dt * 12);
   const shake = A.kick > .65 ? rand(-1, 1) * A.kick * 14 : 0;
   if (T.hl) {
-    front.style.setProperty('--hlbg', bgName === 'red' ? HEX.black : HEX.red);
+    const hlbg = bgName === 'red' ? HEX.black : HEX.red;
+    if (hlbg !== T.hlbg) { T.hlbg = hlbg; front.style.setProperty('--hlbg', hlbg); }
     front.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .08})`;
   } else {
     T.el.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .12}) rotate(${T.rot * T.punch}deg)`;
@@ -783,9 +797,9 @@ function drawTotem(g, tt, x, y, s, opts = {}) {
       g.lineWidth = TOT_LW; g.lineJoin = 'miter'; g.lineCap = 'butt';
       g.setLineDash(full ? [] : [m.draw * 5, 5]);
       // While a module traces on, its solid fills wait until the outline is mostly drawn.
-      if (!full && m.draw < .6) g.fill = () => {};
+      TFILL.off = !full && m.draw < .6;
       M.draw(g, { c, a, t, ph, e, look: TOT.look, beat: A.beatCount, full });
-      delete g.fill;
+      TFILL.off = false;
       g.restore();
     };
     if (full && e > .3) pass(HEX.red, HEX.red, s * e * .05);
@@ -925,11 +939,21 @@ function syncToggle() {
 
 function syncTap() {
   const arr = syncTimes();
-  const t = Math.max(0, audio.currentTime - TAP_LATENCY);
+  const raw = Math.max(0, audio.currentTime - TAP_LATENCY);
   // Re-tapping after seeking back replaces everything from that point on.
-  while (arr.length && arr[arr.length - 1] >= t) arr.pop();
-  if (arr.length >= SONG_LINES[cur].length) return;
-  arr.push(Math.round(t * 100) / 100);
+  while (arr.length && arr[arr.length - 1] >= raw) arr.pop();
+  const text = SONG_LINES[cur][arr.length];
+  if (!text) return;
+  let t = raw;
+  const grid = TRACK_GRID[cur];
+  if (grid) {
+    const beat = 60 / grid.bpm;
+    let bar = Math.round((raw - grid.phase) / (4 * beat));
+    const at = (b) => grid.phase + (b * 4 + grid.pickup(text)) * beat;
+    while (arr.length && at(bar) <= arr[arr.length - 1]) bar++;
+    t = at(bar);
+  }
+  arr.push(Math.round(t * 1000) / 1000);
   saveLocalSync();
   syncRender();
 }
@@ -1567,6 +1591,7 @@ window.addEventListener('resize', resize);
 /* ------------------------------------------------------------------ */
 
 const clock = new THREE.Clock();
+const hudCache = {};
 let t = 0;
 
 function frame() {
@@ -1605,11 +1630,20 @@ function frame() {
   renderer.render(scene, camera);
 
   flash *= Math.exp(-dt * 9);
-  flashEl.style.opacity = flash.toFixed(3);
-  grain.style.backgroundPosition = `${(Math.random() * 160) | 0}px ${(Math.random() * 160) | 0}px`;
+  // Only touch the DOM when something actually changes, and move the grain with a
+  // compositor-only transform at ~30fps, so the page never repaints full-screen layers per frame.
+  const fo = flash > .003 ? flash.toFixed(2) : '0';
+  if (fo !== hudCache.flash) { hudCache.flash = fo; flashEl.style.opacity = fo; }
+  if ((hudCache.grainTick = !hudCache.grainTick)) {
+    grain.style.transform = `translate(${(Math.random() * 160) | 0}px, ${(Math.random() * 160) | 0}px)`;
+  }
 
-  if (mode === 'track' && audio.duration) $('bar').firstElementChild.style.width = (audio.currentTime / audio.duration * 100) + '%';
-  $('bpm').textContent = A.bpm && mode !== 'idle' ? `BPM ~${A.bpm}` : 'BPM —';
+  if (mode === 'track' && audio.duration) {
+    const pct = (audio.currentTime / audio.duration * 100).toFixed(1) + '%';
+    if (pct !== hudCache.pct) { hudCache.pct = pct; $('bar').firstElementChild.style.width = pct; }
+  }
+  const bpm = A.bpm && mode !== 'idle' ? `BPM ~${A.bpm}` : 'BPM —';
+  if (bpm !== hudCache.bpm) { hudCache.bpm = bpm; $('bpm').textContent = bpm; }
 
   if (idleTimer > 0) {
     idleTimer -= dt;

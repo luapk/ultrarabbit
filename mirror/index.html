@@ -86,12 +86,16 @@
 </div>
 
 <script src="/totems.js"></script>
+<script src="/rabbit-run.js"></script>
 <script type="module">
 import { FaceLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
 
 const $ = (id) => document.getElementById(id);
 const RED = '#ff2d2d', WHITE = '#ffffff', BLACK = '#000000';
 const rand = (a, b) => a + Math.random() * (b - a);
+// Write to the DOM only when the text actually changes.
+const textCache = {};
+const setText = (id, v) => { if (textCache[id] !== v) { textCache[id] = v; $(id).textContent = v; } };
 const lerp = (a, b, k) => a + (b - a) * k;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
@@ -181,7 +185,7 @@ function track(now) {
 /* Audio + beat detection                                              */
 /* ------------------------------------------------------------------ */
 
-const audio = new Audio('/WorkingFromHome.mp3');
+const audio = new Audio('/media/WorkingFromHome-192.mp3');
 audio.loop = true;
 audio.preload = 'auto';
 let actx = null, analyser = null, data = null, recDest = null;
@@ -266,9 +270,9 @@ function drawPiece(m, x, y, size, t, ph, rot = 0) {
     g.translate(-.5, -M.h / 2);
     g.lineWidth = TOT_LW; g.lineJoin = 'miter'; g.lineCap = 'butt';
     if (m.draw < 1) g.setLineDash([m.draw * 5, 5]);
-    if (m.draw < .6) g.fill = () => {};
+    TFILL.off = m.draw < .6;
     M.draw(g, { c, a, t, ph, e, look: Math.sin(t * 3 + x * 4), beat: A.beatCount, full: m.draw >= 1 });
-    delete g.fill;
+    TFILL.off = false;
     g.restore();
   };
   if (m.draw >= 1 && e > .25) pass(RED, RED, size * e * .12);
@@ -392,6 +396,34 @@ const FX = {
     },
   },
 };
+// Running rabbits lap the head: sizes alternate 1 and 1/phi, the ring turns one stride per two
+// beats so the feet stay planted, and it swells on each beat as one runner flips colour.
+const PHI = (1 + Math.sqrt(5)) / 2;
+FX.RUNNERS = {
+  init(fx) { fx.a = 0; fx.swell = 0; fx.flip = -1; fx.n = 7; },
+  beat(fx) { fx.swell = 1; fx.flip = (fx.flip + 1) % fx.n; },
+  draw(fx, t, dt, ph) {
+    const rx = .95, ry = 1.12, stride = RUN_W * .36 * .9;
+    const ibi = A.bpm ? 60 / A.bpm : .5;
+    fx.a += dt * stride / ((rx + ry) / 2) / (2 * ibi);
+    fx.swell *= Math.exp(-dt * 7);
+    const grow = 1 + fx.swell * .08;
+    const frame = Math.floor((A.beatCount + ph) * 4);
+    for (let i = 0; i < fx.n; i++) {
+      const a = fx.a + i * Math.PI * 2 / fx.n;
+      const x = Math.cos(a) * rx * grow, y = .2 + Math.sin(a) * ry * grow;
+      const h = (i % 2 ? .36 / PHI : .36) * (1 + fx.swell * .15);
+      const inv = i === fx.flip;
+      g.save();
+      g.translate(x, y);
+      // Heading along the ring (anticlockwise on screen), feet towards the face.
+      g.rotate(a - Math.PI / 2);
+      g.scale(-1, 1);
+      drawRun(g, ((frame + i * 3) % 8 + 8) % 8, 0, 0, h, inv ? RED : WHITE, i % 2 && !inv ? null : (inv ? WHITE : RED));
+      g.restore();
+    }
+  },
+};
 const FX_NAMES = Object.keys(FX);
 
 /* ------------------------------------------------------------------ */
@@ -411,14 +443,14 @@ function traced(d, fn) {
   if (d <= 0) return;
   g.save();
   if (d < 1) g.setLineDash([d * 9, 9]);
-  if (d < .65) g.fill = () => {};
+  TFILL.off = d < .65;
   fn();
-  delete g.fill;
+  TFILL.off = false;
   g.restore();
 }
 const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
 const ring = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); };
-const disc = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); };
+const disc = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); tFill(g); };
 function dashed(pattern, offset, fn) { g.save(); g.setLineDash(pattern); g.lineDashOffset = offset; fn(); g.restore(); }
 
 function drawGoggles(P, d, c, a, t, e, ph) {
@@ -508,10 +540,13 @@ function drawEars(P, d, c, a, t, e, ph) {
     for (let k = 0; k < 3; k++) {
       const y = fy - .42 + k * .1 + .1 - eOut(ph) * .1;
       g.fillStyle = (k + A.beatCount) % 3 === 0 ? a : c;
-      g.beginPath(); g.moveTo(0, y); g.lineTo(-.07, y + .075); g.lineTo(.07, y + .075); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(0, y); g.lineTo(-.07, y + .075); g.lineTo(.07, y + .075); g.closePath(); tFill(g);
     }
   });
 }
+
+const WORD_FONT = '900 100px "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif';
+let wordK = 0;
 
 function drawMouth(P, d, c, a, t, e) {
   const mx = (P.lipTop[0] + P.lipBot[0]) / 2, my = (P.lipTop[1] + P.lipBot[1]) / 2;
@@ -521,14 +556,15 @@ function drawMouth(P, d, c, a, t, e) {
     ring(mx, my, R);
     if (d >= 1) { g.lineWidth = .014; dashed([.05, .035], t * .7, () => ring(mx, my, R + .05)); }
     g.fillStyle = c;
-    g.beginPath(); g.arc(mx, my - .1 - open / 2, hr, Math.PI, 0); g.closePath(); g.fill();
-    g.beginPath(); g.arc(mx, my + .1 + open / 2, hr, 0, Math.PI); g.closePath(); g.fill();
+    g.beginPath(); g.arc(mx, my - .1 - open / 2, hr, Math.PI, 0); g.closePath(); tFill(g);
+    g.beginPath(); g.arc(mx, my + .1 + open / 2, hr, 0, Math.PI); g.closePath(); tFill(g);
     // ULTRARABBIT wordmark, fitted to run past the ring like the logo; inverts on alternate beats.
     const flip = d >= 1 && A.beatCount % 2 === 1;
     g.save();
     g.translate(mx, my);
-    g.font = '900 100px "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif';
-    const k = 1.15 / g.measureText('ULTRARABBIT').width;
+    g.font = WORD_FONT;
+    if (!wordK) wordK = 1.15 / g.measureText('ULTRARABBIT').width;
+    const k = wordK;
     const bh = 100 * k * .95, bw = 1.25;
     g.fillStyle = flip ? c : BLACK;
     g.fillRect(-bw / 2, -bh / 2, bw, bh);
@@ -664,11 +700,11 @@ function frame(now) {
     g.fillStyle = WHITE; g.textBaseline = 'middle'; g.textAlign = 'left';
     g.fillText(label, W - w - 22, H - 28);
     const sec = Math.floor((performance.now() - recStart) / 1000);
-    $('rectime').textContent = `● ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    setText('rectime', `● ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
     if (sec >= REC_MAX) stopRecording();
   }
 
-  $('tr').textContent = !landmarker ? 'LOADING' : found ? (A.bpm ? `BPM ~${A.bpm}` : 'LOCKED') : 'SHOW YOUR FACE';
+  setText('tr', !landmarker ? 'LOADING' : found ? (A.bpm ? `BPM ~${A.bpm}` : 'LOCKED') : 'SHOW YOUR FACE');
 }
 requestAnimationFrame(frame);
 
