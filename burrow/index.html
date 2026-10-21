@@ -81,6 +81,40 @@
   #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
   #gate .alt u:hover { color: var(--red); }
 
+  #direct {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; display: none;
+    background: rgba(0,0,0,.88); border-top: 2px solid var(--red);
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom)); font-size: 11px; letter-spacing: .14em; color: #fff;
+  }
+  #direct.on { display: block; }
+  body.directing #hud .bot { display: none; }
+  #direct .dhead { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  #direct .dhead b { color: var(--red); font-weight: 600; }
+  /* Every scene visible at once so cuts are one tap, no scrolling mid-take. */
+  #dGrid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px;
+    max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  #dGrid button {
+    padding: 0; border: 2px solid #333; background: #000; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  #dGrid button img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+  #dGrid button span {
+    display: block; font: 600 8px "Fira Code", monospace; letter-spacing: .08em; color: #fff; padding: 3px;
+    text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #dGrid button.on { border-color: var(--red); }
+  #dGrid button.on span { background: var(--red); color: #000; }
+  #direct .drow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  #direct .drow button {
+    font: 600 12px "Fira Code", monospace; letter-spacing: .1em; background: #000; color: #fff;
+    outline: 1px solid #fff; border: 0; padding: 9px 12px; cursor: pointer;
+  }
+  #direct .drow button.rec { background: var(--red); color: #000; outline: 0; }
+  #direct .drow button.rec.on { background: #fff; }
+  #dMsg { color: var(--red); }
+
   #sync {
     position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 8; display: none;
     width: min(760px, calc(100% - 32px)); background: #000; outline: 2px solid var(--red); padding: 16px 18px;
@@ -131,14 +165,28 @@
     <button id="prev" aria-label="Previous track">◂◂</button>
     <button id="play" aria-label="Play or pause">▶</button>
     <button id="next" aria-label="Next track">▸▸</button>
+    <button id="dOpen" class="ghost" aria-label="Direct the scenes">DIRECT</button>
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–9 SCENE · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–9 SCENE · D DIRECT · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
 
 <canvas id="cut"></canvas>
+
+<div id="direct" aria-label="Direct mode">
+  <div class="dhead"><b>DIRECT</b><span id="dTrack"></span><span id="dState"></span></div>
+  <div id="dGrid"></div>
+  <div class="drow">
+    <button id="dRec" class="rec">● REC TAKE</button>
+    <button id="dUse">TAKE: ON</button>
+    <button id="dClear">CLEAR TAKE</button>
+    <button id="dCopy">COPY TAKES</button>
+    <button id="dClose">CLOSE</button>
+    <span id="dMsg"></span>
+  </div>
+</div>
 
 <div id="sync" aria-live="polite">
   <div class="hd">SYNC MODE · <span id="syTrack"></span> · LINE <span id="syPos"></span></div>
@@ -535,6 +583,7 @@ function stepMusicClock(dt) {
 }
 
 function playTrack(i) {
+  if (DR.rec) directStop();
   stopMic();
   cur = (i + TRACKS.length) % TRACKS.length;
   bandPlays = 0;
@@ -578,7 +627,7 @@ function stopMic() {
   updateHud();
 }
 
-audio.addEventListener('ended', () => playTrack(cur + 1));
+audio.addEventListener('ended', () => { if (DR.rec) directStop(); playTrack(cur + 1); });
 audio.addEventListener('play', updateHud);
 audio.addEventListener('pause', updateHud);
 
@@ -1508,10 +1557,11 @@ function nextScene() {
   else do { n = pick(ROTATION); } while (n === sceneName);
   setScene(n);
 }
-bandVid.addEventListener('ended', () => { if (sceneName === 'BAND') nextScene(); });
+// Under direction the clip just plays once and holds; otherwise move on when it ends.
+bandVid.addEventListener('ended', () => { if (sceneName === 'BAND' && !directing()) nextScene(); });
 let sceneName = 'FACE', sceneBeat = 0, flash = 0, sceneCuts = 0;
 
-function setScene(name, keepText = false) {
+function setScene(name, keepText = false, quiet = false) {
   sceneName = name;
   sceneBeat = A.beatCount;
   if (name !== 'BAND') { bandVid.classList.remove('on'); bandVid.pause(); }
@@ -1520,9 +1570,138 @@ function setScene(name, keepText = false) {
   if (!keepText) textSetup(S[name].text);
   S[name].setup();
   if (keepText) renderText();
-  if (!keepText) fever(rand(6, 10));
+  if (!keepText && !quiet) fever(rand(6, 10));
   $('scn').textContent = `SCENE · ${name.replace('_', ' ')}`;
+  markTile();
 }
+
+/* ------------------------------------------------------------------ */
+/* Direct mode: tap scenes live, record a take per song, play it back  */
+/* ------------------------------------------------------------------ */
+
+const DIRECT_TILES = [...MASK_SCENES, 'BAND', ...TOTEM_SCENES, ...RUN_SCENES, 'LOGO'];
+// Recorded takes, per track: [{ t: song seconds, s: scene name or 'LOGO' }]. A take saved on this
+// device wins; BAKED_DIRECT holds takes published for everyone.
+const BAKED_DIRECT = [null, null, null];
+const DIRECT_KEY = 'burrow-direct-v1';
+let localDirect = {};
+try { localDirect = JSON.parse(localStorage.getItem(DIRECT_KEY)) || {}; } catch (e) { localDirect = {}; }
+const takeFor = (i) => (localDirect[i] && localDirect[i].length ? localDirect[i] : BAKED_DIRECT[i]);
+const saveDirect = () => { try { localStorage.setItem(DIRECT_KEY, JSON.stringify(localDirect)); } catch (e) { /* session only */ } };
+
+const DR = { open: false, rec: null, recTrack: 0, use: true, lastT: 0, built: false };
+
+// True while the scenes are under the director's control (live, recording or playing a take).
+function directing() {
+  if (DR.open || DR.rec) return true;
+  return DR.use && mode === 'track' && !!takeFor(cur);
+}
+
+function markTile() {
+  if (!DR.built) return;
+  for (const b of $('dGrid').children) b.classList.toggle('on', b.dataset.s === sceneName);
+}
+
+function buildGrid() {
+  if (DR.built) return;
+  DR.built = true;
+  for (const name of DIRECT_TILES) {
+    const b = document.createElement('button');
+    b.dataset.s = name;
+    const img = document.createElement('img');
+    img.src = `/burrow/thumbs/${name}.jpg`;
+    img.alt = '';
+    img.loading = 'lazy';
+    const label = document.createElement('span');
+    label.textContent = name.replace('_', ' ');
+    b.append(img, label);
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); directCue(name); });
+    $('dGrid').append(b);
+  }
+  markTile();
+}
+
+function directCue(name) {
+  if (name === 'LOGO') fever(rand(8, 12)); else setScene(name, false, true);
+  if (DR.rec) DR.rec.push({ t: Math.round(audio.currentTime * 1000) / 1000, s: name });
+}
+
+function directToggle(open = !DR.open) {
+  DR.open = open;
+  buildGrid();
+  $('direct').classList.toggle('on', open);
+  document.body.classList.toggle('directing', open);
+  $('dMsg').textContent = '';
+  if (!open && DR.rec) directStop();
+}
+
+function directRec() {
+  if (DR.rec) return directStop();
+  ensureCtx(); actx.resume();
+  if (mode !== 'track') playTrack(cur);
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+  DR.recTrack = cur;
+  DR.rec = [{ t: 0, s: sceneName }];
+  $('dRec').classList.add('on');
+  $('dMsg').textContent = '';
+}
+
+function directStop() {
+  if (!DR.rec) return;
+  localDirect[DR.recTrack] = DR.rec;
+  saveDirect();
+  $('dMsg').textContent = `TAKE SAVED · ${DR.rec.length} CUES`;
+  DR.rec = null;
+  DR.lastT = audio.currentTime;
+  $('dRec').classList.remove('on');
+}
+
+// Play a take: hold the scene of the latest cue at the playhead and fire LOGO cues as they pass.
+function directPlayback() {
+  if (DR.open || DR.rec || !DR.use || mode !== 'track') return;
+  const take = takeFor(cur);
+  if (!take) return;
+  const ct = audio.currentTime;
+  let scene = null;
+  for (const c of take) {
+    if (c.t > ct) break;
+    if (c.s === 'LOGO') { if (c.t > DR.lastT && ct - c.t < .5) fever(rand(8, 12)); } else scene = c.s;
+  }
+  DR.lastT = ct;
+  if (scene && scene !== sceneName) setScene(scene, false, true);
+}
+
+function directHud() {
+  if (!DR.open) return;
+  const take = takeFor(cur);
+  const m = Math.floor(audio.currentTime / 60), sec = String(Math.floor(audio.currentTime % 60)).padStart(2, '0');
+  const state = DR.rec ? `● REC ${m}:${sec} · ${DR.rec.length} CUES`
+    : take ? `TAKE: ${take.length} CUES${localDirect[cur] && localDirect[cur].length ? '' : ' (DEFAULT)'}` : 'LIVE · NO TAKE YET';
+  if (hudCache.dState !== state) { hudCache.dState = state; $('dState').textContent = state; }
+  const title = TRACKS[cur].title;
+  if (hudCache.dTrack !== title) { hudCache.dTrack = title; $('dTrack').textContent = title; }
+}
+
+$('dOpen').addEventListener('click', () => directToggle(true));
+$('dClose').addEventListener('click', () => directToggle(false));
+$('dRec').addEventListener('click', directRec);
+$('dUse').addEventListener('click', () => {
+  DR.use = !DR.use;
+  $('dUse').textContent = DR.use ? 'TAKE: ON' : 'TAKE: OFF';
+});
+$('dClear').addEventListener('click', () => {
+  delete localDirect[cur];
+  saveDirect();
+  $('dMsg').textContent = 'TAKE CLEARED';
+});
+$('dCopy').addEventListener('click', async () => {
+  const out = {};
+  TRACKS.forEach((tr, i) => { const tk = takeFor(i); if (tk) out[tr.title] = tk; });
+  const text = 'BURROW_DIRECT ' + JSON.stringify(out);
+  try { await navigator.clipboard.writeText(text); $('dMsg').textContent = 'COPIED'; }
+  catch (e) { window.prompt('Copy these takes:', text); }
+});
 
 /* ------------------------------------------------------------------ */
 /* HUD, input, grain                                                   */
@@ -1563,13 +1742,15 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if ((e.key === 'y' || e.key === 'Y') && !gateOpen) return syncToggle();
+  if ((e.key === 'd' || e.key === 'D') && !gateOpen) return directToggle();
   if (e.code === 'Space') { e.preventDefault(); if (gateOpen) enter(false); else togglePlay(); }
   else if (e.key === 'ArrowRight') { ensureCtx(); actx.resume(); playTrack(cur + 1); }
   else if (e.key === 'ArrowLeft') { ensureCtx(); actx.resume(); playTrack(cur - 1); }
   else if (e.key >= '1' && e.key <= String(KEYS.length)) {
     const k = KEYS[+e.key - 1];
     const cycle = (list) => list[(list.indexOf(sceneName) + 1) % list.length];
-    setScene(k === 'TOTEM' ? cycle(TOTEM_SCENES) : k === 'RUN' ? cycle(RUN_SCENES) : k);
+    const name = k === 'TOTEM' ? cycle(TOTEM_SCENES) : k === 'RUN' ? cycle(RUN_SCENES) : k;
+    if (DR.open || DR.rec) directCue(name); else setScene(name);
   }
   else if (e.key === 'm' || e.key === 'M') { if (gateOpen) enter(true); else if (mode === 'mic') stopMic(); else startMic(); }
   else if (e.key === 'f' || e.key === 'F') {
@@ -1629,16 +1810,22 @@ function frame() {
   stepMusicClock(dt);
   syncText();
 
+  directPlayback();
+  const directed = directing();
   if (A.beat) {
-    if (A.beatCount - sceneBeat >= S[sceneName].len) {
+    if (!directed && A.beatCount - sceneBeat >= S[sceneName].len) {
       nextScene();
     } else {
       textBeat();
-      if (A.beatCount % 32 === 0) fever(rand(10, 16));
-      else if (!isFlat(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
-      else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
+      // Under direction only the director's cuts and LOGO cues fire.
+      if (!directed) {
+        if (A.beatCount % 32 === 0) fever(rand(10, 16));
+        else if (!isFlat(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
+        else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
+      }
     }
   }
+  directHud();
   feverUpdate();
 
   S[sceneName].update(t, dt);
