@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root { --red: #ff2d2d; --tc: #fff; --bg: #000; }
+  :root { --red: #ff2d2d; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: #000; overflow: hidden; color: #fff; }
   body { font-family: "Fira Code", ui-monospace, monospace; -webkit-font-smoothing: antialiased; }
@@ -21,13 +21,14 @@
 
   .txt {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    overflow: hidden; color: var(--tc);
+    overflow: hidden;
     font-family: "Bebas Neue", Impact, "Arial Narrow", sans-serif;
     line-height: .82; text-transform: uppercase; white-space: nowrap;
   }
-  .txt .ln { display: block; padding: 0 .04em; will-change: transform; }
-  .txt .ln.inv { background: var(--tc); color: var(--bg); }
-  .txt .ln.hl { background: var(--hlbg); color: #fff; -webkit-text-stroke: 0; padding: .03em .14em 0; margin: .03em 0; }
+  .txt .ln { display: block; line-height: .95; }
+  /* Every word sits on its own block so it reads over anything; the .on word is the highlighter. */
+  .txt .w { display: inline-block; background: var(--wb); color: var(--wt); padding: .05em .1em 0; margin: .02em .03em; }
+  .txt .w.on { background: var(--ab); color: var(--at); }
 
   #grain {
     inset: -160px; opacity: .09;
@@ -114,7 +115,6 @@
 </head>
 <body>
 <div id="stage">
-  <div id="back" class="layer txt"></div>
   <canvas id="gl"></canvas>
   <canvas id="totem" class="layer"></canvas>
   <div id="front" class="layer txt"></div>
@@ -181,7 +181,7 @@ const TRACKS = [
 // Every sung line in order, per track (same order as TRACKS).
 const SONG_LINES = [["WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE", "WE'RE FIRST IN LINE", "OUR RIGHTFUL PLACE", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE COMING THROUGH", "WE'RE COMING FAST", "EAT OUR DUST", "WE'RE SCREAMING PAST", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "WE'RE BLASTING OFF", "WE'RE IN CONTROL", "YOU CAN'T HOLD US BACK", "WE'RE STANDING TALL", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THIS IS WHO WE ARE NOW", "THIS IS WHAT WE DO", "THE WORLD IS OURS", "SO IT BEGINS", "THE ULTRARABBIT", "ALWAYS WINS", "THIS IS OUR TIME", "THIS IS OUR TIME", "WE'RE LEAVING YOU BEHIND NOW", "THIS IS OUR TIME"], ["WHEN PEOPLE SAY EASE BACK", "I SAY FUCK THAT", "THE NIGHT IS YOUNG", "COME ON", "LET'S HAVE FUN", "GIRLS AND BOYS", "TONIGHT IS MY OWN", "I DON'T WANNA GO HOME", "I'VE GOT A SHED TO BUILD", "AND A WIFE TO AVOID", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "THERE'S PLENTY OF TIME", "TILL THE LAST TRAIN", "COME ON EVERYBODY", "SAME AGAIN", "NO EXCUSES", "YOU CAN'T GO HOME", "LEAVING ME HERE DRINKING", "ON MY OWN", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY", "ANY WAY!", "LYING IN BED", "WITH THE LAPTOP OPEN", "MOVING THE MOUSE", "SO IT LOOKS LIKE I'M WORKING", "MY HANGOVER'S SCREAMING", "'NEVER AGAIN!!!'", "FUCK THAT! TONIGHT", "I WANT MORE OF THE SAME", "LET'S PARTY LIKE WE DON'T HAVE WORK IN THE MORNING", "THE WORST THAT CAN HAPPEN", "IS A WRITTEN WARNING", "NEXT ROUND'S ON ME", "WHAT DO YOU SAY?", "I'M WORKING FROM HOME", "TOMORROW ANYWAY"], ["HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHAT DID YOU HEAR?", "WHAT DID I SAY?", "HOW LONG WERE YOU LISTENING", "ANYWAY?", "WAS IT ALL MUFFLED?", "WAS IT ALL CLEAR?", "WHAT DID YOU HEAR?", "WHAT DID YOU HEAR?", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL", "WHERE ARE YOU BABE?", "I THOUGHT YOU WERE AT HOME?", "I THOUGHT I HEARD VOICES", "BUT YOU LIVE ALONE", "ER… YEAH,", "THAT MUST HAVE BEEN THE TV", "I GUESS I POCKET CALLED", "ACCIDENTALLY, SORRY", "HEY BABE DID YOU MEAN", "TO RING?", "GOD, SORRY NO", "IT WAS A POCKET CALL", "DID YOU MEAN TO RING ME", "AT ALL?", "NO SORRY NO", "IT WAS A POCKET CALL"]];
 
-// Lines that always sit on the top layer with a highlight bar so they read over anything.
+// Lines that always show, even mid-verse.
 const HIGHLIGHT = new Set(["WE'RE BEAUTIFUL", "WE'RE IN YOUR FACE"]);
 
 // Lyrics only show on the first and last line of each verse / chorus, the refrain, and the
@@ -211,7 +211,7 @@ const TRACK_GRID = [
 
 const HEX = { red: '#ff2d2d', black: '#000000', white: '#ffffff' };
 const $ = (id) => document.getElementById(id);
-const stage = $('stage'), back = $('back'), front = $('front'), flashEl = $('flash'), grain = $('grain');
+const stage = $('stage'), front = $('front'), flashEl = $('flash'), grain = $('grain');
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -450,7 +450,6 @@ let bgName = 'black';
 function setBg(name) {
   bgName = name;
   stage.style.background = HEX[name];
-  document.documentElement.style.setProperty('--bg', HEX[name]);
 }
 
 const view = () => ({ W: window.innerWidth, H: window.innerHeight, aspect: window.innerWidth / window.innerHeight });
@@ -519,6 +518,18 @@ function analyse(t, dt) {
   A.kick = Math.max(A.kick * Math.exp(-dt * 7), A.beat ? A.strength : 0);
 }
 
+// Smooth music clock in beats. With a measured grid it comes straight from the playback
+// position; otherwise it runs at the detected tempo and eases toward each detected beat, so
+// anything driven by it moves fluidly instead of waiting on the next beat.
+const MC = { v: 0, corr: 0 };
+function stepMusicClock(dt) {
+  const grid = mode === 'track' ? TRACK_GRID[cur] : null;
+  if (grid && !audio.paused) { MC.v = (audio.currentTime - grid.phase) * grid.bpm / 60; return; }
+  MC.v += dt * (A.bpm || 120) / 60 * (1 + MC.corr);
+  MC.corr *= Math.exp(-dt * 1.5);
+  if (A.beat) MC.corr = Math.max(-.25, Math.min(.25, (Math.round(MC.v) - MC.v) * .6));
+}
+
 function playTrack(i) {
   stopMic();
   cur = (i + TRACKS.length) % TRACKS.length;
@@ -571,7 +582,7 @@ audio.addEventListener('pause', updateHud);
 /* Giant lyric typography                                              */
 /* ------------------------------------------------------------------ */
 
-const T = { mode: 'slam', el: front, phrase: '', words: [], wi: 0, full: false, hl: false, beats: 0, punch: 0, rot: 0, sync: -1 };
+const T = { mode: 'slam', phrase: '', words: [], wi: 0, active: 0, full: false, beats: 0, punch: 0, rot: 0, sync: -1, pal: '', els: [] };
 
 // v2: v1 taps predate the beat-grid timings and would override them.
 const SYNC_KEY = 'burrow-sync-v2';
@@ -606,7 +617,7 @@ function currentLine() {
 function syncText() {
   const L = currentLine();
   if (!L) {
-    if (T.sync >= 0) { T.sync = -1; T.phrase = ''; T.hl = false; renderText(); }
+    if (T.sync >= 0) { T.sync = -1; T.phrase = ''; renderText(); }
     return;
   }
   const ct = audio.currentTime;
@@ -614,110 +625,106 @@ function syncText() {
   const full = L.last && ct >= L.paced;
   if (L.i !== T.sync) {
     T.sync = L.i;
-    T.phrase = L.text; T.words = L.words; T.wi = wi; T.full = full;
-    T.hl = HIGHLIGHT.has(L.text);
+    T.phrase = L.text; T.words = L.words; T.wi = T.active = wi; T.full = full;
     renderText();
     T.punch = 1; T.rot = rand(-3, 3);
-  } else if (T.mode === 'slam' && !T.hl && (wi !== T.wi || full !== T.full)) {
-    T.wi = wi; T.full = full;
+  } else if (T.mode === 'slam' && (wi !== T.wi || full !== T.full)) {
+    T.wi = T.active = wi; T.full = full;
     renderText();
     T.punch = 1; T.rot = full ? 0 : rand(-3, 3);
-  }
+  } else if (!full && wi !== T.wi) {
+    // The highlighter follows the vocal through the line.
+    T.wi = T.active = wi;
+    markActive();
+  } else T.full = full;
 }
 
-function wrapLines(phrase, max) {
+function wrapLines(words, max) {
   const out = [];
-  let line = '';
-  for (const w of phrase.split(' ')) {
-    if (line && (line + ' ' + w).length > max) { out.push(line); line = w; } else line = line ? line + ' ' + w : w;
+  let line = [];
+  for (const w of words) {
+    if (line.length && [...line, w].join(' ').length > max) { out.push(line); line = [w]; } else line.push(w);
   }
-  if (line) out.push(line);
+  if (line.length) out.push(line);
   return out;
 }
 
 function fitSpan(span, maxW, maxH) {
   span.style.fontSize = '100px';
   const w = span.getBoundingClientRect().width || 1;
-  const fs = Math.min(100 * maxW / w, maxH / .82);
+  const fs = Math.min(100 * maxW / w, maxH / .95);
   span.style.fontSize = fs + 'px';
   return fs;
 }
 
-function lineEl(text, cls = '') {
-  const s = document.createElement('span');
-  s.className = 'ln ' + cls;
-  s.textContent = text;
-  return s;
+// Word blocks take the two palette colours that differ from the scene background; the
+// highlighter uses the contrasting pair.
+const WORD_PAL = {
+  black: { wb: HEX.white, wt: HEX.black, ab: HEX.red, at: HEX.white },
+  red: { wb: HEX.black, wt: HEX.white, ab: HEX.white, at: HEX.red },
+  white: { wb: HEX.black, wt: HEX.white, ab: HEX.red, at: HEX.white },
+};
+function applyWordPalette() {
+  if (T.pal === bgName) return;
+  T.pal = bgName;
+  const p = WORD_PAL[bgName];
+  for (const k in p) front.style.setProperty('--' + k, p[k]);
 }
 
+function markActive() {
+  T.els.forEach((el, i) => el.classList.toggle('on', T.els.length === 1 || i === T.active));
+}
 
 function renderText() {
   const { W, H } = view();
-  back.replaceChildren(); front.replaceChildren();
-  back.style.transform = front.style.transform = '';
+  front.replaceChildren();
+  front.style.transform = '';
+  T.els = [];
   if (T.mode === 'none' || !T.phrase) return;
-  if (T.hl) {
-    const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
-    const spans = lines.map((l) => lineEl(l, 'hl'));
-    T.hlbg = bgName === 'red' ? HEX.black : HEX.red;
-    front.style.setProperty('--hlbg', T.hlbg);
-    front.append(...spans);
-    const sizes = spans.map((sp) => fitSpan(sp, W * .86, H));
-    const total = sizes.reduce((a, b) => a + b * .95, 0);
-    if (total > H * .86) spans.forEach((sp, i) => (sp.style.fontSize = sizes[i] * H * .86 / total + 'px'));
-    return;
-  }
-  const el = T.el;
-  if (T.mode === 'slam' && !T.full) {
-    const s = lineEl(T.words[T.wi]);
-    el.append(s);
-    fitSpan(s, W * .94, H * .72);
-  } else if (T.mode === 'block' || T.mode === 'slam') {
-    const lines = wrapLines(T.phrase, W / H > 1 ? 13 : 9);
-    const spans = lines.map((l) => lineEl(l));
-    el.append(...spans);
-    const sizes = spans.map((s) => fitSpan(s, W * .94, H));
-    const total = sizes.reduce((a, b) => a + b * .82, 0);
-    if (total > H * .92) {
-      const k = H * .92 / total;
-      spans.forEach((s, i) => (s.style.fontSize = sizes[i] * k + 'px'));
+  applyWordPalette();
+  const words = T.mode === 'slam' && !T.full ? [T.words[T.wi]] : T.words;
+  const lines = wrapLines(words, W / H > 1 ? 13 : 9).map((ws) => {
+    const ln = document.createElement('span');
+    ln.className = 'ln';
+    for (const w of ws) {
+      const el = document.createElement('span');
+      el.className = 'w';
+      el.textContent = w;
+      ln.append(el);
+      T.els.push(el);
     }
-  }
+    return ln;
+  });
+  front.append(...lines);
+  const single = words.length === 1;
+  const sizes = lines.map((ln) => fitSpan(ln, W * .9, single ? H * .7 : H));
+  const total = sizes.reduce((a, b) => a + b * .95, 0);
+  if (total > H * .88) lines.forEach((ln, i) => (ln.style.fontSize = sizes[i] * H * .88 / total + 'px'));
+  markActive();
 }
 
-function textSetup(textMode, layer, color) {
-  back.replaceChildren(); front.replaceChildren();
+function textSetup(textMode) {
+  front.replaceChildren();
   T.mode = textMode;
-  T.el = layer === 'back' ? back : front;
-  T.el.style.setProperty('--tc', HEX[color]);
   T.beats = 0;
   T.sync = -1;
   T.phrase = '';
+  T.els = [];
 }
 
-// The words follow the vocal; beats only add hits to whatever line is up.
+// While a held last line sits on screen, the highlighter steps through it on the beat.
 function textBeat() {
   T.beats++;
   if (T.sync < 0) return;
-  if (T.hl) { T.punch = Math.max(T.punch, .45); return; }
-  if (T.mode === 'block' || (T.mode === 'slam' && T.full)) {
-    const spans = [...T.el.children];
-    spans.forEach((sp) => sp.classList.remove('inv'));
-    if (spans.length > 1) pick(spans).classList.add('inv');
-  }
+  if (T.full && T.els.length > 1) { T.active = (T.active + 1) % T.els.length; markActive(); }
   T.punch = Math.max(T.punch, .45);
 }
 
 function textUpdate(dt) {
   T.punch *= Math.exp(-dt * 12);
+  if (T.els.length) applyWordPalette();
   const shake = A.kick > .65 ? rand(-1, 1) * A.kick * 14 : 0;
-  if (T.hl) {
-    const hlbg = bgName === 'red' ? HEX.black : HEX.red;
-    if (hlbg !== T.hlbg) { T.hlbg = hlbg; front.style.setProperty('--hlbg', hlbg); }
-    front.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .08})`;
-  } else {
-    T.el.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .12}) rotate(${T.rot * T.punch}deg)`;
-  }
+  front.style.transform = `translateX(${shake}px) scale(${1 + T.punch * .1}) rotate(${T.rot * T.punch}deg)`;
 }
 
 
@@ -1008,7 +1015,7 @@ S.FACE = {
     const { aspect } = view(), h = visH(6);
     this.s = Math.min(.86 * h / 3.4, .8 * h * aspect / MASK.w);
   },
-  text: ['block', 'back', 'white'],
+  text: 'block',
   update(t) {
     const m = masks[0];
     m.rotation.set(-A.kick * .3 + Math.sin(t * .3) * .06, Math.sin(t * .45) * .55, Math.sin(t * .23) * .08);
@@ -1039,7 +1046,7 @@ S.ARMY = {
     }
     this.odd = -1;
   },
-  text: ['slam', 'front', 'white'],
+  text: 'slam',
   update(t) {
     if (A.beat && A.beatCount % 4 === 0) {
       if (this.odd >= 0) palette(masks[this.odd], 'black', 'black', 'white', 'red', 'red');
@@ -1072,7 +1079,7 @@ S.TUNNEL = {
       u.uFadeNear.value = 14; u.uFadeFar.value = 44; u.cFade.value.set(HEX.black);
     }
   },
-  text: ['slam', 'front', 'white'],
+  text: 'slam',
   update(t, dt) {
     const speed = 5 + A.level * 26 + A.kick * 18;
     this.spin += dt * (.2 + A.mid * .8);
@@ -1099,7 +1106,7 @@ S.ORBIT = {
       palette(masks[i], 'black', 'black', 'white', 'red', 'red');
     }
   },
-  text: ['block', 'back', 'white'],
+  text: 'block',
   update(t) {
     for (let i = 0; i < this.n; i++) {
       const m = masks[i];
@@ -1114,9 +1121,9 @@ S.ORBIT = {
 };
 
 const STROBE_LOOKS = {
-  black: { pal: ['red', 'white', 'white', 'red', 'black'], text: 'white' },
-  red: { pal: ['black', 'black', 'white', 'white', 'red'], text: 'black' },
-  white: { pal: ['black', 'red', 'red', 'black', 'white'], text: 'red' },
+  black: { pal: ['red', 'white', 'white', 'red', 'black'] },
+  red: { pal: ['black', 'black', 'white', 'white', 'red'] },
+  white: { pal: ['black', 'red', 'red', 'black', 'white'] },
 };
 
 S.STROBE = {
@@ -1133,9 +1140,8 @@ S.STROBE = {
   look(bg) {
     setBg(bg);
     palette(masks[0], ...STROBE_LOOKS[bg].pal);
-    T.el.style.setProperty('--tc', HEX[STROBE_LOOKS[bg].text]);
   },
-  text: ['slam', 'front', 'white'],
+  text: 'slam',
   update() {
     const m = masks[0];
     if (A.beat) {
@@ -1166,7 +1172,7 @@ S.BAND = {
     bandVid.currentTime = 0;
     bandVid.play().catch(() => {});
   },
-  text: ['none', 'front', 'white'],
+  text: 'none',
   update() {
     bandVid.style.transform = `scale(${1 + A.kick * .035})`;
   },
@@ -1178,7 +1184,7 @@ const totemCv = $('totem'), totemCtx = totemCv.getContext('2d');
 function totemScene(def) {
   return Object.assign({
     len: 8,
-    text: ['none', 'front', 'white'],
+    text: 'none',
     setup() {
       setCam(35, [0, 0, 6]);
       setBg('black');
@@ -1329,7 +1335,7 @@ S.TOTEM_DIVE = totemScene({
 const PHI = (1 + Math.sqrt(5)) / 2;
 const RUN_COLS = [HEX.red, HEX.black, HEX.white];
 // Four frames per beat: one stride every two beats, close to the drawing's own 10fps.
-const runFrame = (ph, offset = 0) => (((Math.floor((A.beatCount + ph) * 4) + offset) % 8) + 8) % 8;
+const runFrame = (offset = 0) => (((Math.floor(MC.v * 4) + offset) % 8) + 8) % 8;
 
 // Russian dolls: each rabbit holds a smaller one (x 1/phi) running a couple of frames behind,
 // and the view zooms in one doll per bar, forever.
@@ -1338,7 +1344,7 @@ S.RUN_DOLL = totemScene({
   onBeat() { this.punch = 1; },
   draw(g, W, H, dt, ph) {
     this.punch *= Math.exp(-dt * 8);
-    const beats = A.beatCount + ph, gen = Math.floor(beats / 4), u = (beats / 4) % 1;
+    const beats = MC.v, gen = Math.floor(beats / 4), u = (beats / 4) % 1;
     const big = Math.max(W / RUN_W, H) * 1.7 * (1 + this.punch * .03);
     g.fillStyle = RUN_COLS[(gen + 2) % 3];
     g.fillRect(0, 0, W, H);
@@ -1346,7 +1352,7 @@ S.RUN_DOLL = totemScene({
       const h = big * PHI ** (u - k);
       if (h < 5) break;
       const fill = RUN_COLS[(k + gen) % 3], line = RUN_COLS[(k + gen + 1) % 3];
-      drawRun(g, runFrame(ph, -2 * k), W / 2, H / 2 + h * .06, h, line, fill, (k + gen) % 2 === 1);
+      drawRun(g, runFrame(-2 * k), W / 2, H / 2 + h * .06, h, line, fill, (k + gen) % 2 === 1);
     }
   },
 });
@@ -1377,7 +1383,7 @@ S.RUN_GOLDEN = totemScene({
   },
   onBeat() {},
   draw(g, W, H, dt, ph) {
-    const beats = A.beatCount + ph, gen = Math.floor(beats / 4), u = eOut((beats / 4) % 1);
+    const beats = MC.v, gen = Math.floor(beats / 4), u = (beats / 4) % 1;
     g.fillStyle = RUN_COLS[(gen + 2) % 3];
     g.fillRect(0, 0, W, H);
     g.save();
@@ -1399,7 +1405,7 @@ S.RUN_GOLDEN = totemScene({
       g.save();
       g.translate(q.cx + Math.cos(a) * r, q.cy + Math.sin(a) * r);
       g.rotate(a + Math.PI / 2);
-      drawRun(g, runFrame(ph, q.i + 8), 0, 0, q.s * .44, ink);
+      drawRun(g, runFrame(q.i + 8), 0, 0, q.s * .44, ink);
       g.restore();
     }
     g.restore();
@@ -1433,7 +1439,7 @@ S.RUN_HERD = totemScene({
       const start = ((r.off % gap) + gap) % gap - gap;
       let n = 0;
       for (let x = start; x < W + gap; x += gap, n++) {
-        drawRun(g, runFrame(ph, (n * 3 + r.k) % 8), x, r.y + r.h / 2, rh, ink, null, r.dir < 0);
+        drawRun(g, runFrame((n * 3 + r.k) % 8), x, r.y + r.h / 2, rh, ink, null, r.dir < 0);
       }
     }
   },
@@ -1464,7 +1470,7 @@ function setScene(name, keepText = false) {
   if (name !== 'BAND') { bandVid.classList.remove('on'); bandVid.pause(); }
   if (!isFlat(name)) totemCv.classList.remove('on');
   resetMasks();
-  if (!keepText) textSetup(...S[name].text);
+  if (!keepText) textSetup(S[name].text);
   S[name].setup();
   if (keepText) renderText();
   if (!keepText) fever(rand(6, 10));
@@ -1573,6 +1579,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), .05);
   t += dt;
   analyse(t, dt);
+  stepMusicClock(dt);
   syncText();
 
   if (A.beat) {
