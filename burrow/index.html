@@ -134,7 +134,7 @@
     <div id="trk">—</div>
     <div id="bar"><i></i></div>
     <div class="brk"></div>
-    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–8 SCENE · F FULLSCREEN · H HIDE HUD</div>
+    <div id="keys">SPACE PLAY · ←/→ TRACK · 1–9 SCENE · F FULLSCREEN · H HIDE HUD</div>
   </div>
 </div>
 
@@ -250,7 +250,7 @@ function removeTris(geo, test) {
   return g;
 }
 
-const MASK = { w: 1, h: 1, faceY: 0 };
+const MASK = { w: 1, h: 1, faceY: 0, eye: [0, 0, 0] };
 function buildMask() {
   const parts = [];
 
@@ -283,6 +283,7 @@ function buildMask() {
   for (const s of [-1, 1]) {
     const eye = new THREE.OctahedronGeometry(.065, 0);
     eye.scale(1, 1, .4); eye.translate(s * .22, .22, surfZ(s * .22, .22) + .01);
+    if (s > 0) MASK.eye = [.22, .22, surfZ(.22, .22) + .01];
     parts.push([flat(eye), 1]);
   }
   const mouth = new THREE.BoxGeometry(.3, .1, .05);
@@ -339,6 +340,7 @@ function buildMask() {
   const cen2 = geo.attributes.aCentroid;
   for (let i = 0; i < cen2.count; i++) cen2.setXYZ(i, cen2.getX(i) - c.x, cen2.getY(i) - c.y, cen2.getZ(i));
   MASK.w = bb.max.x - bb.min.x; MASK.h = bb.max.y - bb.min.y; MASK.faceY = -c.y;
+  MASK.eye[0] -= c.x; MASK.eye[1] -= c.y;
   return geo;
 }
 
@@ -397,7 +399,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, .1, 200);
-const camBase = { pos: new THREE.Vector3(0, 0, 6), look: new THREE.Vector3() };
+const camBase = { pos: new THREE.Vector3(0, 0, 6), look: new THREE.Vector3(), parallax: 1 };
 
 const baseMat = new THREE.ShaderMaterial({
   uniforms: {
@@ -441,6 +443,8 @@ function resetMasks() {
 
 function setCam(fov, pos, look = [0, 0, 0]) {
   camera.fov = fov;
+  camera.near = .1;
+  camBase.parallax = 1;
   camBase.pos.set(...pos); camBase.look.set(...look);
   camera.position.copy(camBase.pos); camera.lookAt(camBase.look);
   camera.updateProjectionMatrix();
@@ -1120,6 +1124,49 @@ S.ORBIT = {
   },
 };
 
+
+// Fly into the mask's eye: the camera closes on the glowing pinhole exponentially (constant
+// perceived zoom), passes inside it so the screen fills with its colour, and the next mask
+// appears on that same colour. One dive per two bars on the music clock.
+const EYE_LOOKS = [
+  { bg: 'black', pal: ['black', 'white', 'white', 'red', 'black'] },
+  { bg: 'red', pal: ['black', 'black', 'red', 'white', 'black'] },
+  { bg: 'white', pal: ['red', 'red', 'white', 'black', 'white'] },
+];
+
+S.EYE_DIVE = {
+  len: 16,
+  text: 'block',
+  setup() {
+    setCam(35, [0, 0, 9]);
+    camera.near = .002;
+    camera.updateProjectionMatrix();
+    camBase.parallax = 0;
+    masks[0].visible = true;
+    this.dive = -1;
+  },
+  update(t) {
+    const dive = Math.floor(MC.v / 8), u = (MC.v / 8) % 1;
+    if (dive !== this.dive) {
+      this.dive = dive;
+      const look = EYE_LOOKS[((dive % 3) + 3) % 3];
+      setBg(look.bg);
+      palette(masks[0], ...look.pal);
+    }
+    const [ex, ey, ez] = MASK.eye;
+    const d0 = 9, d1 = .008;
+    const dist = d0 * (d1 / d0) ** u;
+    // Line up on the eye during the first part of the dive, then fall straight in.
+    const a = eOut(Math.min(1, u * 2.2));
+    const shake = A.kick > .7 ? (Math.random() - .5) * .02 * dist : 0;
+    camBase.pos.set(ex * a + shake, ey * a, ez + dist);
+    camBase.look.set(ex * a, ey * a, ez - 1);
+    const m = masks[0];
+    m.rotation.set(Math.sin(t * .5) * .05 * (1 - a), Math.sin(t * .4) * .12 * (1 - a), 0);
+    m.material.uniforms.uGlitch.value = A.kick > .85 && u < .6 ? .2 : 0;
+  },
+};
+
 const STROBE_LOOKS = {
   black: { pal: ['red', 'white', 'white', 'red', 'black'] },
   red: { pal: ['black', 'black', 'white', 'white', 'red'] },
@@ -1445,11 +1492,11 @@ S.RUN_HERD = totemScene({
   },
 });
 
-const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE'];
+const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE', 'EYE_DIVE'];
 const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_DIVE'];
 const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN', 'RUN_HERD'];
 const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES];
-// Number keys: 1-5 mask scenes, 6 band clip, 7 steps through the totem sequences, 8 the runs.
+// Number keys: 1-6 mask scenes, 7 band clip, 8 steps through the totem sequences, 9 the runs.
 const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM', 'RUN'];
 // Scenes drawn on the flat 2D canvas rather than in 3D.
 const isFlat = (n) => n.startsWith('TOTEM_') || n.startsWith('RUN_');
@@ -1606,7 +1653,7 @@ function frame() {
     u.cVoid.value.set(HEX[bgName]);
   }
 
-  camera.position.set(camBase.pos.x + mouse.x * .35, camBase.pos.y - mouse.y * .25, camBase.pos.z);
+  camera.position.set(camBase.pos.x + mouse.x * .35 * camBase.parallax, camBase.pos.y - mouse.y * .25 * camBase.parallax, camBase.pos.z);
   camera.lookAt(camBase.look);
   renderer.render(scene, camera);
 
