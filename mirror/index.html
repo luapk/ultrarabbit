@@ -65,7 +65,7 @@
 <canvas id="c"></canvas>
 <div id="tl" class="tag"><b>ULTRARABBIT</b> // MIRROR</div>
 <div id="tr" class="tag">LOADING</div>
-<div id="trk">WORKING FROM HOME</div>
+<div id="trk">THIS IS WHO WE ARE</div>
 <div id="recbar">
   <button id="rec" aria-label="Record"><i></i></button>
   <div id="rectime">● 0:00</div>
@@ -185,7 +185,7 @@ function track(now) {
 /* Audio + beat detection                                              */
 /* ------------------------------------------------------------------ */
 
-const audio = new Audio('/media/WorkingFromHome-192.mp3');
+const audio = new Audio('/media/ThisIsWhoWeAre-192.mp3');
 audio.loop = true;
 audio.preload = 'auto';
 let actx = null, analyser = null, data = null, recDest = null;
@@ -559,22 +559,25 @@ function drawMouth(P, d, c, a, t, e) {
     g.beginPath(); g.arc(mx, my - .1 - open / 2, hr, Math.PI, 0); g.closePath(); tFill(g);
     g.beginPath(); g.arc(mx, my + .1 + open / 2, hr, 0, Math.PI); g.closePath(); tFill(g);
     // ULTRARABBIT wordmark, fitted to run past the ring like the logo; inverts on alternate beats.
-    const flip = d >= 1 && A.beatCount % 2 === 1;
-    g.save();
-    g.translate(mx, my);
-    g.font = WORD_FONT;
-    if (!wordK) wordK = 1.15 / g.measureText('ULTRARABBIT').width;
-    const k = wordK;
-    const bh = 100 * k * .95, bw = 1.25;
-    g.fillStyle = flip ? c : BLACK;
-    g.fillRect(-bw / 2, -bh / 2, bw, bh);
-    if (d >= .65) {
-      g.scale(k, k);
-      g.fillStyle = flip ? BLACK : c;
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('ULTRARABBIT', 0, 4);
+    // Only on one rabbit in four, so it lands as an occasional signature.
+    if (seq.word) {
+      const flip = d >= 1 && A.beatCount % 2 === 1;
+      g.save();
+      g.translate(mx, my);
+      g.font = WORD_FONT;
+      if (!wordK) wordK = 1.15 / g.measureText('ULTRARABBIT').width;
+      const k = wordK;
+      const bh = 100 * k * .95, bw = 1.25;
+      g.fillStyle = flip ? c : BLACK;
+      g.fillRect(-bw / 2, -bh / 2, bw, bh);
+      if (d >= .65) {
+        g.scale(k, k);
+        g.fillStyle = flip ? BLACK : c;
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('ULTRARABBIT', 0, 4);
+      }
+      g.restore();
     }
-    g.restore();
   });
 }
 
@@ -598,13 +601,15 @@ function drawRabbit(P, d, t, ph, red = false) {
 /* Sequence: intro totems -> rabbit (10s) -> random totem fx -> rabbit…  */
 /* ------------------------------------------------------------------ */
 
-const TIMES = { intro: 12, trace: 2.2, rabbit: 10, untrace: .6, fx: 7 };
-const seq = { name: 'intro', start: 0, fx: null, fxName: 'ORBIT' };
+const TIMES = { intro: 16, trace: 2.2, rabbit: 10, untrace: .6, fx: 7, runners: 10 };
+const seq = { name: 'intro', start: 0, fx: null, fxName: 'RUNNERS', rabbits: 0, word: true };
 
 function enter(name, t) {
   seq.name = name; seq.start = t;
+  if (name === 'trace') { seq.rabbits++; seq.word = seq.rabbits % 4 === 1; }
   if (name === 'intro' || name === 'fx') {
-    seq.fxName = name === 'intro' ? 'ORBIT' : totemPick(FX_NAMES.filter((n) => n !== seq.fxName));
+    // The running rabbits open every session, then the totem animations rotate between faces.
+    seq.fxName = name === 'intro' ? 'RUNNERS' : totemPick(FX_NAMES.filter((n) => n !== seq.fxName));
     seq.fx = {};
     FX[seq.fxName].init(seq.fx);
   }
@@ -616,7 +621,7 @@ function advance(t) {
   else if (seq.name === 'trace' && el > TIMES.trace) enter('rabbit', t);
   else if (seq.name === 'rabbit' && el > TIMES.rabbit) enter('untrace', t);
   else if (seq.name === 'untrace' && el > TIMES.untrace) enter('fx', t);
-  else if (seq.name === 'fx' && el > TIMES.fx) enter('trace', t);
+  else if (seq.name === 'fx' && el > (seq.fxName === 'RUNNERS' ? TIMES.runners : TIMES.fx)) enter('trace', t);
 }
 
 function rabbitProgress(t) {
@@ -695,7 +700,7 @@ function frame(now) {
 
   if (recorder && recorder.state === 'recording') {
     g.font = '600 12px "Fira Code", monospace';
-    const label = 'ULTRARABBIT // WORKING FROM HOME', w = g.measureText(label).width;
+    const label = 'ULTRARABBIT // THIS IS WHO WE ARE', w = g.measureText(label).width;
     g.fillStyle = BLACK; g.fillRect(W - w - 30, H - 40, w + 16, 24);
     g.fillStyle = WHITE; g.textBaseline = 'middle'; g.textAlign = 'left';
     g.fillText(label, W - w - 22, H - 28);
