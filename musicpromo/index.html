@@ -580,6 +580,8 @@ function ensureCtx() {
   const el = actx.createMediaElementSource(audio);
   el.connect(analyser);
   el.connect(actx.destination);
+  // Shared with /musicpromo/busts.js for the intro's UI sound effects.
+  window.burrowAudioCtx = actx;
 }
 
 function band(a, b) {

@@ -15,6 +15,7 @@ const INFLECT = 14.742;                     // bar 9: the intro's second phrase,
 const EVA = { a: 148.868, b: 165.225 };     // bars 91-101, from the first chanted "ultrarabbit"
 const ANDY = { a: 165.225, b: 181.582 };    // bars 101-111, ending into the 3:02.6 "ultrarabbit"
 const LOGO = { fadeIn: 2.2, glitch: 3.0, glow: 3.6 };
+const LOADED = { eva: 11.4, andy: 12.6, module: 12.9 };
 
 const canvas = document.getElementById('bust3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -146,6 +147,43 @@ function drawSpirals(beats) {
   }
 }
 
+/* ---------------- UI sound effects (synthesised, on the page's audio context) ---------------- */
+let sfxBus = null;
+function sfx() {
+  const ctx = window.burrowAudioCtx;
+  if (!ctx) return null;
+  if (!sfxBus) { sfxBus = ctx.createGain(); sfxBus.gain.value = .55; sfxBus.connect(ctx.destination); }
+  return ctx;
+}
+function tone(freq, dur = .06, type = 'square', vol = .12, at = 0, slideTo = 0) {
+  const ctx = sfx(); if (!ctx) return;
+  const t0 = ctx.currentTime + at, o = ctx.createOscillator(), gn = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  gn.gain.setValueAtTime(0, t0); gn.gain.linearRampToValueAtTime(vol, t0 + .004);
+  gn.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.connect(gn); gn.connect(sfxBus); o.start(t0); o.stop(t0 + dur + .02);
+}
+function noise(dur = .6, vol = .2, from = 4000, to = 300, q = 4) {
+  const ctx = sfx(); if (!ctx) return;
+  const t0 = ctx.currentTime, n = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+  // Crackly digital noise: bursts of white noise gated at a stuttering rate.
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (Math.floor(i / 900) % 3 ? 1 : .15);
+  const src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), gn = ctx.createGain();
+  src.buffer = buf; bp.type = 'bandpass'; bp.Q.value = q;
+  bp.frequency.setValueAtTime(from, t0); bp.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+  gn.gain.setValueAtTime(vol, t0); gn.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  src.connect(bp); bp.connect(gn); gn.connect(sfxBus); src.start(t0);
+}
+const SFX = {
+  glitch: () => { noise(.75, .32, 6000, 400, 3); tone(90, .3, 'sawtooth', .08, 0, 45); },
+  glow: () => { tone(180, .55, 'sawtooth', .07, 0, 1800); noise(.55, .12, 800, 7000, 1.5); },
+  blip: (i) => tone(900 + (i % 5) * 230, .045, 'square', .05),
+  tick: () => tone(3200, .018, 'square', .025),
+  loaded: () => { tone(880, .12, 'triangle', .13); tone(1320, .2, 'triangle', .13, .09); },
+  module: () => { tone(660, .12, 'square', .07); tone(990, .12, 'square', .07, .1); tone(1320, .35, 'triangle', .12, .2); },
+};
+
 /* ---------------- intro: logo, glitch, glow, HUD ---------------- */
 const GLYPHS = ['EARS', 'ARROWS', 'GOGGLES', 'EYE', 'MOUTH', 'DIAMOND', 'VENT', 'CHEVRON', 'DOME', 'VISOR'];
 const glyphMods = GLYPHS.map((k) => ({ ...newMod(k) }));
@@ -206,11 +244,11 @@ function drawHud(t, beats) {
   g.fillStyle = 'rgba(255,255,255,.45)'; g.font = `${12 * u}px "Fira Code", ui-monospace, monospace`; g.textAlign = 'left';
   for (let i = 0; i < 3; i++) g.fillText(alienStr(w < h ? 14 : 26, beat * 7 + i), m + 14 * u, m + 34 * u + i * 15 * u);
   // Side glyph columns built from the totem modules; one highlighted per beat.
-  const gs = 30 * u;
+  const gs = 48 * u;
   glyphMods.forEach((mod, i) => {
     const on = i === beat % glyphMods.length;
     for (const [x, flip] of [[m + 16 * u, 1], [w - m - 16 * u - gs, -1]]) {
-      const y = m + 86 * u + i * (gs * .78);
+      const y = m + 86 * u + i * (gs * .74);
       if (y + gs * .7 > h - m - 70 * u) continue;
       g.save(); g.translate(x + (flip < 0 ? gs : 0), y); g.scale(gs * flip, gs);
       g.lineWidth = TOT_LW;
@@ -219,12 +257,15 @@ function drawHud(t, beats) {
     }
   });
   // A small totem pulsing in the centre, between the two heads.
-  const ts = 54 * u, th = totemH(hudTotem) * ts;
-  if (w >= h) drawTotem(g, hudTotem, (w - ts) / 2, h * .22, ts, { scan: ((beats % 4) / 4) });
+  const ts = (w >= h ? 90 : 70) * u, th = totemH(hudTotem) * ts;
+  if (w >= h && t < LOADED.module) drawTotem(g, hudTotem, (w - ts) / 2, Math.max(m + 80 * u, (h - th) / 2 - 30 * u), ts, { scan: ((beats % 4) / 4) });
   // Loading bars and labels under each head.
-  const prog = (delay) => clamp((t - LOGO.glow - delay) / (INFLECT - LOGO.glow - delay - .7), 0, 1);
-  const steps = (p) => Math.min(1, Math.floor(p * 24 + eOut(ph) * .99) / 24 + (p >= 1 ? 1 : 0));
-  const bars = [['SUBJECT 01 · EVA', .25 * w, steps(prog(0))], ['SUBJECT 02 · ANDY', .75 * w, steps(prog(.8))]];
+  // Eva finishes at 0:11.4, Andy at 0:12.6, leaving room for MODULE LOADED before the cut.
+  const prog = (delay, end) => clamp((t - LOGO.glow - delay) / (end - LOGO.glow - delay), 0, 1);
+  // 24 visible steps; never shows 100% until loading has actually finished, so it can't flick back.
+  const steps = (p) => (p >= 1 ? 1 : Math.min(23, Math.floor(p * 24)) / 24);
+  const pe = steps(prog(0, LOADED.eva)), pa = steps(prog(.8, LOADED.andy));
+  const bars = [['SUBJECT 01 · EVA', .25 * w, pe], ['SUBJECT 02 · ANDY', .75 * w, pa]];
   for (const [name, x, p] of bars) {
     const bw = w < h ? w * .38 : Math.min(w * .3, 300 * u), bx = x - bw / 2, by = h - m - 34 * u;
     g.fillStyle = '#fff'; g.font = `600 ${12 * u}px "Fira Code", ui-monospace, monospace`; g.textAlign = 'left';
@@ -234,8 +275,39 @@ function drawHud(t, beats) {
     g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, u); g.strokeRect(bx, by, bw, 8 * u);
     g.fillStyle = p >= 1 ? '#ff2d2d' : '#fff'; g.fillRect(bx + 2 * u, by + 2 * u, (bw - 4 * u) * p, 4 * u);
   }
+  // Both in: MODULE LOADED, flashing on the beat until the cut.
+  if (t >= LOADED.module) {
+    const blink = ph < .55, fs = (w >= h ? 34 : 24) * u;
+    g.font = `700 ${fs}px "Fira Code", ui-monospace, monospace`;
+    const label = 'MODULE LOADED', tw = g.measureText(label).width, px = 22 * u, bh = fs * 1.7;
+    const bx = (w - tw) / 2 - px, by = h * .5 - bh / 2;
+    g.fillStyle = blink ? '#ff2d2d' : '#000'; g.fillRect(bx, by, tw + px * 2, bh);
+    g.strokeStyle = '#ff2d2d'; g.lineWidth = 2 * u; g.strokeRect(bx, by, tw + px * 2, bh);
+    g.fillStyle = blink ? '#fff' : '#ff2d2d'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(label, w / 2, h * .5 + 1);
+    g.textBaseline = 'top';
+  }
   if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
-  return [prog(0), prog(.8)];
+  return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
+}
+
+/* ---------------- intro sound cues: fire when the playhead crosses them (not on seeks) ---------------- */
+const SF = { t: -1, beat: -1, pe: 0, pa: 0 };
+function introSfx(t, beats, loads) {
+  const dt = t - SF.t, beat = Math.floor(beats), [, , pe, pa] = loads;
+  const cross = (x) => SF.t < x && t >= x;
+  if (dt > 0 && dt < .3) {
+    if (cross(LOGO.fadeIn)) SFX.glitch();
+    if (cross(LOGO.glitch)) SFX.glow();
+    if (t > LOGO.glow) {
+      if (beat !== SF.beat) SFX.blip(beat);
+      if ((pe > SF.pe && pe < 1) || (pa > SF.pa && pa < 1)) SFX.tick();
+      if (pe >= 1 && SF.pe < 1) SFX.loaded();
+      if (pa >= 1 && SF.pa < 1) SFX.loaded();
+      if (cross(LOADED.module)) SFX.module();
+    }
+  }
+  SF.t = t; SF.beat = beat; SF.pe = pe; SF.pa = pa;
 }
 
 /* ---------------- per-frame ---------------- */
@@ -276,8 +348,9 @@ function update(t, beats, live) {
     andy.visible = true;
     orbitIn(t, beats, ANDY.a, ANDY.b, new THREE.Vector3(0, .5, .05));
   } else {
-    let loads = [0, 0];
+    let loads = [0, 0, 0, 0];
     if (t < LOGO.glow) drawLogo(t); else loads = drawHud(t, beats);
+    introSfx(t, beats, loads);
     if (t >= LOGO.glow) {
       // Heads left and right, turning slowly as they load from the base up.
       // Landscape: side by side. Portrait: Eva above Andy.
@@ -299,5 +372,5 @@ function update(t, beats, live) {
   return true;
 }
 
-window.burrowBusts = { update, INFLECT };
+window.burrowBusts = { update, INFLECT, SFX };
 })();
