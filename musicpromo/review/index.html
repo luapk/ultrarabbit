@@ -79,7 +79,10 @@ const altsFor = (i) => LINES.map((l, j) => j).filter((j) => j !== i && LINES[j].
 // Decisions per selected line: { src, status: 'pending' | 'approved' | 'rejected' | 'dropped' }.
 let D = {};
 try { D = JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { D = {}; }
-for (const i of DEFAULT) if (!D[i]) D[i] = { src: i, status: 'pending' };
+// The signed-off review, used until this device makes its own decisions.
+const SIGNED_OFF = { 0: 'dropped', 14: 'dropped' };
+const fresh = (i) => ({ src: i, status: SIGNED_OFF[i] || 'approved' });
+for (const i of DEFAULT) if (!D[i]) D[i] = fresh(i);
 
 function save() {
   try {
@@ -166,9 +169,9 @@ function render() {
 
 $('playAll').onclick = playAll;
 $('reset').onclick = () => {
-  if (!confirm('Clear all decisions?')) return;
+  if (!confirm('Reset to the signed-off selection?')) return;
   D = {};
-  for (const i of DEFAULT) D[i] = { src: i, status: 'pending' };
+  for (const i of DEFAULT) D[i] = fresh(i);
   save();
   render();
 };

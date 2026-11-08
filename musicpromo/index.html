@@ -1723,7 +1723,8 @@ $('dCopy').addEventListener('click', async () => {
 // the master at +11.925s, trimmed from its 16s mark): file time = song time - PROMO_OFFSET.
 // Picks made on /musicpromo/review are saved on this device and override the default.
 const PROMO_OFFSET = 27.925;
-const PROMO_DEFAULT = [0, 6, 7, 8, 10, 14, 18, 20, 22, 26, 31, 32, 34, 35].map((i) => ({ line: i, src: i }));
+// Approved on /musicpromo/review: 12 lines, each with its own footage.
+const PROMO_DEFAULT = [6, 7, 8, 10, 18, 20, 22, 26, 31, 32, 34, 35].map((i) => ({ line: i, src: i }));
 const PROMO_KEY = 'promo-selection-v1';
 let promoPicks = PROMO_DEFAULT;
 try {
