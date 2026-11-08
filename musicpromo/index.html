@@ -1559,11 +1559,21 @@ const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM', 'RUN'];
 // Scenes drawn on the flat 2D canvas rather than in 3D.
 const isFlat = (n) => n.startsWith('TOTEM_') || n.startsWith('RUN_');
 
+// Promo mix: totems get ~2x a running scene's pick weight and masks ~0.64x, which (with masks
+// lasting 12-24 beats and totems 8) shifts about 20 points of screen time from masks to totems.
+const SCENE_WEIGHT = (n) => (n.startsWith('TOTEM_') ? 2.12 : n.startsWith('RUN_') ? 1 : .64);
+function pickWeighted() {
+  const total = ROTATION.reduce((a, n) => a + SCENE_WEIGHT(n), 0);
+  let r = Math.random() * total;
+  for (const n of ROTATION) { r -= SCENE_WEIGHT(n); if (r <= 0) return n; }
+  return ROTATION[ROTATION.length - 1];
+}
+
 function nextScene() {
   let n;
   sceneCuts++;
   if (sceneCuts % 3 === 0 && sceneName !== 'BAND' && bandPlays < BAND_MAX) n = 'BAND';
-  else do { n = pick(ROTATION); } while (n === sceneName);
+  else do { n = pickWeighted(); } while (n === sceneName);
   setScene(n);
 }
 // Under direction the clip just plays once and holds; otherwise move on when it ends.
@@ -1723,9 +1733,15 @@ $('dCopy').addEventListener('click', async () => {
 // the master at +11.925s, trimmed from its 16s mark): file time = song time - PROMO_OFFSET.
 // Picks made on /musicpromo/review are saved on this device and override the default.
 const PROMO_OFFSET = 27.925;
-// Approved on /musicpromo/review: 12 lines, each with its own footage.
-const PROMO_DEFAULT = [6, 7, 8, 10, 18, 20, 22, 26, 31, 32, 34, 35].map((i) => ({ line: i, src: i }));
-const PROMO_KEY = 'promo-selection-v1';
+// Approved on /musicpromo/review: 12 lines, each with its own footage, plus repeats of approved
+// takes on matching lyrics in verses 3 and 4 (verse 4 wasn't filmed, so it reuses verse 1 / 2 takes).
+const PROMO_DEFAULT = [
+  ...[6, 7, 8, 10, 18, 20, 22, 26, 31, 32, 34, 35].map((i) => ({ line: i, src: i })),
+  { line: 30, src: 18 }, { line: 33, src: 35 },
+  { line: 42, src: 6 }, { line: 43, src: 7 }, { line: 44, src: 8 },
+];
+// v2: added verse 3 / 4 repeats; older saved picks predate them.
+const PROMO_KEY = 'promo-selection-v2';
 let promoPicks = PROMO_DEFAULT;
 try {
   const saved = JSON.parse(localStorage.getItem(PROMO_KEY));

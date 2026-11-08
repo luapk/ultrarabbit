@@ -64,9 +64,13 @@
 (() => {
 'use strict';
 // Every sung line the footage covers: song start time (s) and lyric. Footage file time = song time - OFFSET.
-const LINES = [{"t": 28.849, "text": "WE'RE BLASTING OFF"}, {"t": 30.485, "text": "WE'RE IN CONTROL"}, {"t": 32.121, "text": "YOU CAN'T HOLD US BACK"}, {"t": 33.756, "text": "WE'RE STANDING TALL"}, {"t": 35.392, "text": "THE WORLD IS OURS"}, {"t": 37.028, "text": "SO IT BEGINS"}, {"t": 38.663, "text": "THE ULTRARABBIT"}, {"t": 40.299, "text": "ALWAYS WINS"}, {"t": 41.935, "text": "THIS IS WHO WE ARE NOW"}, {"t": 44.184, "text": "THIS IS WHAT WE DO"}, {"t": 45.206, "text": "THIS IS WHO WE ARE NOW"}, {"t": 47.455, "text": "THIS IS WHAT WE DO"}, {"t": 55.02, "text": "WE'RE BEAUTIFUL"}, {"t": 56.656, "text": "WE'RE IN YOUR FACE"}, {"t": 58.292, "text": "WE'RE FIRST IN LINE"}, {"t": 59.927, "text": "OUR RIGHTFUL PLACE"}, {"t": 61.563, "text": "THE WORLD IS OURS"}, {"t": 63.199, "text": "SO IT BEGINS"}, {"t": 64.834, "text": "THE ULTRARABBIT"}, {"t": 66.47, "text": "ALWAYS WINS"}, {"t": 68.106, "text": "THIS IS WHO WE ARE NOW"}, {"t": 70.355, "text": "THIS IS WHAT WE DO"}, {"t": 71.377, "text": "THIS IS WHO WE ARE NOW"}, {"t": 73.626, "text": "THIS IS WHAT WE DO"}, {"t": 81.191, "text": "WE'RE COMING THROUGH"}, {"t": 82.827, "text": "WE'RE COMING FAST"}, {"t": 84.462, "text": "EAT OUR DUST"}, {"t": 86.098, "text": "WE'RE SCREAMING PAST"}, {"t": 87.734, "text": "THE WORLD IS OURS"}, {"t": 89.369, "text": "SO IT BEGINS"}, {"t": 91.005, "text": "THE ULTRARABBIT"}, {"t": 92.641, "text": "ALWAYS WINS"}, {"t": 94.276, "text": "THIS IS WHO WE ARE NOW"}, {"t": 96.526, "text": "THIS IS WHAT WE DO"}, {"t": 97.548, "text": "THIS IS WHO WE ARE NOW"}, {"t": 99.797, "text": "THIS IS WHAT WE DO"}];
-const OFFSET = 27.925, BEAT = 60 / 146.728, KEY = 'promo-selection-v1', DKEY = 'promo-review-v1';
-const DEFAULT = [0, 6, 7, 8, 10, 14, 18, 20, 22, 26, 31, 32, 34, 35];
+const LINES = [{"t": 28.849, "text": "WE'RE BLASTING OFF"}, {"t": 30.485, "text": "WE'RE IN CONTROL"}, {"t": 32.121, "text": "YOU CAN'T HOLD US BACK"}, {"t": 33.756, "text": "WE'RE STANDING TALL"}, {"t": 35.392, "text": "THE WORLD IS OURS"}, {"t": 37.028, "text": "SO IT BEGINS"}, {"t": 38.663, "text": "THE ULTRARABBIT"}, {"t": 40.299, "text": "ALWAYS WINS"}, {"t": 41.935, "text": "THIS IS WHO WE ARE NOW"}, {"t": 44.184, "text": "THIS IS WHAT WE DO"}, {"t": 45.206, "text": "THIS IS WHO WE ARE NOW"}, {"t": 47.455, "text": "THIS IS WHAT WE DO"}, {"t": 55.02, "text": "WE'RE BEAUTIFUL"}, {"t": 56.656, "text": "WE'RE IN YOUR FACE"}, {"t": 58.292, "text": "WE'RE FIRST IN LINE"}, {"t": 59.927, "text": "OUR RIGHTFUL PLACE"}, {"t": 61.563, "text": "THE WORLD IS OURS"}, {"t": 63.199, "text": "SO IT BEGINS"}, {"t": 64.834, "text": "THE ULTRARABBIT"}, {"t": 66.47, "text": "ALWAYS WINS"}, {"t": 68.106, "text": "THIS IS WHO WE ARE NOW"}, {"t": 70.355, "text": "THIS IS WHAT WE DO"}, {"t": 71.377, "text": "THIS IS WHO WE ARE NOW"}, {"t": 73.626, "text": "THIS IS WHAT WE DO"}, {"t": 81.191, "text": "WE'RE COMING THROUGH"}, {"t": 82.827, "text": "WE'RE COMING FAST"}, {"t": 84.462, "text": "EAT OUR DUST"}, {"t": 86.098, "text": "WE'RE SCREAMING PAST"}, {"t": 87.734, "text": "THE WORLD IS OURS"}, {"t": 89.369, "text": "SO IT BEGINS"}, {"t": 91.005, "text": "THE ULTRARABBIT"}, {"t": 92.641, "text": "ALWAYS WINS"}, {"t": 94.276, "text": "THIS IS WHO WE ARE NOW"}, {"t": 96.526, "text": "THIS IS WHAT WE DO"}, {"t": 97.548, "text": "THIS IS WHO WE ARE NOW"}, {"t": 99.797, "text": "THIS IS WHAT WE DO"}, {"t": 126.99, "text": "WE'RE BLASTING OFF"}, {"t": 128.626, "text": "WE'RE IN CONTROL"}, {"t": 130.261, "text": "YOU CAN'T HOLD US BACK"}, {"t": 131.897, "text": "WE'RE STANDING TALL"}, {"t": 133.533, "text": "THE WORLD IS OURS"}, {"t": 135.168, "text": "SO IT BEGINS"}, {"t": 136.804, "text": "THE ULTRARABBIT"}, {"t": 138.44, "text": "ALWAYS WINS"}, {"t": 140.076, "text": "THIS IS WHO WE ARE NOW"}];
+// Only lines 0-35 were filmed; later lines reuse a take of the same lyric.
+const FILMED = 36;
+const OFFSET = 27.925, BEAT = 60 / 146.728, KEY = 'promo-selection-v2', DKEY = 'promo-review-v2';
+const DEFAULT = [0, 6, 7, 8, 10, 14, 18, 20, 22, 26, 30, 31, 32, 33, 34, 35, 42, 43, 44];
+// Default footage for repeats on lines that weren't approved takes themselves.
+const DEFAULT_SRC = { 30: 18, 33: 35, 42: 6, 43: 7, 44: 8 };
 const $ = (id) => document.getElementById(id);
 const v = $('v'), audio = new Audio('/media/ThisIsWhoWeAre-192.mp3');
 audio.preload = 'auto';
@@ -74,14 +78,14 @@ audio.preload = 'auto';
 const label = (i) => `CLIP ${String(i).padStart(2, '0')} · V${Math.floor(i / 12) + 1} L${(i % 12) + 1}`;
 const stamp = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 const lineEnd = (i) => Math.min(LINES[i + 1] ? LINES[i + 1].t : Infinity, LINES[i].t + 5 * BEAT);
-const altsFor = (i) => LINES.map((l, j) => j).filter((j) => j !== i && LINES[j].text === LINES[i].text);
+const altsFor = (i) => LINES.map((l, j) => j).filter((j) => j !== i && j < FILMED && LINES[j].text === LINES[i].text);
 
 // Decisions per selected line: { src, status: 'pending' | 'approved' | 'rejected' | 'dropped' }.
 let D = {};
 try { D = JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { D = {}; }
 // The signed-off review, used until this device makes its own decisions.
 const SIGNED_OFF = { 0: 'dropped', 14: 'dropped' };
-const fresh = (i) => ({ src: i, status: SIGNED_OFF[i] || 'approved' });
+const fresh = (i) => ({ src: DEFAULT_SRC[i] ?? i, status: SIGNED_OFF[i] || 'approved' });
 for (const i of DEFAULT) if (!D[i]) D[i] = fresh(i);
 
 function save() {
@@ -151,7 +155,7 @@ function render() {
       </div>
       <div class="alts">
         <span>${alts.length ? 'ALTERNATIVES (same lyric, tap to audition):' : 'NO OTHER TAKE OF THIS LINE: APPROVE OR DROP IT'}</span>
-        ${alts.length ? [i, ...alts].map((j) => `<button class="alt${j === d.src ? ' on' : ''}" data-src="${j}">▶ ${label(j)}${j === i ? ' (ORIGINAL)' : ''}</button>`).join('') : ''}
+        ${alts.length ? (i < FILMED ? [i, ...alts] : alts).map((j) => `<button class="alt${j === d.src ? ' on' : ''}" data-src="${j}">▶ ${label(j)}${j === i ? ' (ORIGINAL)' : ''}</button>`).join('') : ''}
       </div>`;
     const q = (sel) => card.querySelector(sel);
     q('.play').onclick = () => play(i, d.src);
