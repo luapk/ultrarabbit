@@ -47,8 +47,30 @@
   #promo video { width: 100%; height: 100%; object-fit: cover; display: block; }
   #promo::after {
     content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(0,0,0,.32) 0 1px, transparent 1px 2px);
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.11) 0 1px, transparent 1px 2px);
   }
+  /* Only the footage's own fine lines while it's up, not the page-wide ones on top. */
+  body.footage #scan { display: none; }
+  body.footage:not(.directing) #hud { opacity: 0; }
+  /* CCTV overlay on the band footage. */
+  .cctv {
+    position: absolute; inset: clamp(10px, 3vmin, 28px); z-index: 1; pointer-events: none;
+    font: 600 clamp(10px, 2.1vmin, 18px)/1.3 "Fira Code", ui-monospace, monospace; letter-spacing: .12em;
+    color: rgba(255,255,255,.88); text-shadow: 0 0 2px #000, 0 0 6px rgba(0,0,0,.8);
+  }
+  .cctv .br { position: absolute; width: 7%; height: 9%; border: 2px solid rgba(255,255,255,.75); }
+  .cctv .br.tl { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+  .cctv .br.tr { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+  .cctv .br.bl { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+  .cctv .br.brr { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+  .cctv .rec { position: absolute; left: 3%; top: 3%; }
+  .cctv .rec i { display: inline-block; width: .8em; height: .8em; border-radius: 50%; background: #ff2d2d; margin-right: .5em; vertical-align: -.05em; }
+  .cctv .rec.off i { visibility: hidden; }
+  .cctv .cam { position: absolute; right: 3%; top: 3%; text-align: right; }
+  .cctv .ts { position: absolute; left: 3%; bottom: 3%; }
+  .cctv .id { position: absolute; right: 3%; bottom: 3%; text-align: right; opacity: .75; }
+  .cctv .mid { position: absolute; left: 50%; top: 50%; width: 3.2%; aspect-ratio: 1; transform: translate(-50%, -50%); opacity: .45;
+    background: linear-gradient(#fff, #fff) center / 100% 1px no-repeat, linear-gradient(#fff, #fff) center / 1px 100% no-repeat; }
   #totem { width: 100%; height: 100%; display: none; }
   #totem.on { display: block; }
 
@@ -161,7 +183,16 @@
   <canvas id="totem" class="layer"></canvas>
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
-  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video></div>
+  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
+    <div class="cctv" aria-hidden="true">
+      <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
+      <div class="rec" id="ccRec"><i></i>REC</div>
+      <div class="cam" id="ccCam">CAM 01<br>ARCADE · FLOOR 1</div>
+      <div class="ts" id="ccTs">07/11/2026 23:41:07</div>
+      <div class="id">ULTRARABBIT SECURITY<br>SYS-UR-146</div>
+      <div class="mid"></div>
+    </div>
+  </div>
   <div id="grain" class="layer"></div>
   <div id="scan" class="layer"></div>
   <div id="flash" class="layer"></div>
@@ -1752,12 +1783,30 @@ const PROMO_CUES = (() => {
   return promoPicks
     .map(({ line, src }) => {
       const a = st[line], b = Math.min(st[line + 1] ?? Infinity, a + 5 * beat);
-      return { a, b, off: st[src] - a };
+      return { a, b, off: st[src] - a, src };
     })
     .sort((x, y) => x.a - y.a);
 })();
 const promoEl = $('promo'), promoVid = $('promoVid');
 const PR = { on: false, primed: -1 };
+
+// CCTV readout: the clock starts the night it was filmed and runs on the footage's own time, so it
+// is continuous within a shot and jumps between shots; the camera number follows the take's verse.
+const CC_START = 23 * 3600 + 41 * 60 + 7;
+const CC_CAMS = ['CAM 01<br>ARCADE · FLOOR 1', 'CAM 02<br>ARCADE · FLOOR 2', 'CAM 03<br>PRIZE ZONE', 'CAM 04<br>EXIT B'];
+const ccCache = {};
+const ccSet = (id, v, html = false) => {
+  if (ccCache[id] === v) return;
+  ccCache[id] = v;
+  if (html) $(id).innerHTML = v; else $(id).textContent = v;
+};
+function cctvUpdate(cue, fileTime) {
+  const t = CC_START + fileTime + PROMO_OFFSET - 11.925;
+  const p2 = (n) => String(Math.floor(n)).padStart(2, '0');
+  ccSet('ccTs', `07/11/2026 ${p2(t / 3600 % 24)}:${p2(t / 60 % 60)}:${p2(t % 60)}:${p2((t % 1) * 25)}`);
+  ccSet('ccCam', CC_CAMS[Math.min(3, Math.floor(cue.src / 12))], true);
+  $('ccRec').classList.toggle('off', (t % 1) > .5);
+}
 
 function promoUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
@@ -1765,12 +1814,13 @@ function promoUpdate() {
   const cue = live ? PROMO_CUES.find((c) => ct >= c.a && ct < c.b) : null;
   if (cue) {
     const want = ct + cue.off - PROMO_OFFSET;
-    if (!PR.on) { PR.on = true; promoEl.classList.add('on'); front.style.visibility = 'hidden'; }
+    if (!PR.on) { PR.on = true; promoEl.classList.add('on'); document.body.classList.add('footage'); front.style.visibility = 'hidden'; }
+    cctvUpdate(cue, want);
     if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
     if (promoVid.paused) promoVid.play().catch(() => {});
     return;
   }
-  if (PR.on) { PR.on = false; promoEl.classList.remove('on'); front.style.visibility = ''; promoVid.pause(); }
+  if (PR.on) { PR.on = false; promoEl.classList.remove('on'); document.body.classList.remove('footage'); front.style.visibility = ''; promoVid.pause(); }
   // Park the footage on the next cue's first frame so the cut is instant.
   const next = live ? PROMO_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
   if (next >= 0 && PR.primed !== next) {
