@@ -55,7 +55,8 @@
   #bust3d.on { display: block; }
   #cine { display: none; background: #000; }
   #cine.on { display: block; }
-  #cine video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #cine video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  #cine video.on { display: block; }
   /* Only the footage's own fine lines while it's up, not the page-wide ones on top. */
   body.footage #scan { display: none; }
   body.footage:not(.directing) #hud { opacity: 0; }
@@ -191,7 +192,7 @@
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
   <canvas id="bust3d" class="layer"></canvas>
-  <div id="cine" class="layer"><video id="cineVid" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video></div>
+  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="coasterVid" muted playsinline preload="auto" src="/musicpromo/coaster.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -1824,32 +1825,42 @@ function cctvUpdate(cue, fileTime) {
   $('ccRec').classList.toggle('off', (t % 1) > .5);
 }
 
-// Cinematic clips in the instrumental gaps: song range [a, b) plays cine.mp4 from `file`.
+// Cinematic clips in the instrumental gaps: song range [a, b) plays `vid` (cine.mp4 unless named)
+// from `file`.
 const CINE_CUES = [
   { a: 14.742, b: 17.95, file: 0 },     // after the loading intro: the pair walk in on red (cut before they look at each other)
   { a: 26.599, b: 28.849, file: 3.208 }, // just before verse 1: close two-shot facing camera
   { a: 49.5, b: 55.02, file: 5.458 },    // V1 > V2 gap: push into Eva's lenses, Andy reflected
   { a: 75.67, b: 81.19, file: 11 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
   { a: 101.842, b: 107.842, file: 16.542 }, // bridge: walking toward camera on white
+  { a: 199.58, b: 219.58, file: 0, vid: 'coaster' }, // instrumental after "this is our time": RABBIT RUSH coaster ride
   { a: 246.85, b: 255, file: 22.542 },   // final shot: the ULTRARABBIT monolith
 ];
-const cineEl = $('cine'), cineVid = $('cineVid');
-const CI = { on: false, primed: -1 };
+const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), coaster: $('coasterVid') };
+const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
+const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
+// Show one of the cinematic videos, pausing the other.
+function cineShow(v) {
+  if (CI.vid === v) return;
+  CI.vid.pause(); CI.vid.classList.remove('on');
+  CI.vid = v; v.classList.add('on');
+}
 
 function cineUpdate(live, ct) {
   const cue = live ? CINE_CUES.find((c) => ct >= c.a && ct < c.b) : null;
   if (cue) {
-    const want = cue.file + ct - cue.a;
+    const want = cue.file + ct - cue.a, v = cueVid(cue);
+    cineShow(v);
     if (!CI.on) { CI.on = true; cineEl.classList.add('on'); }
-    if (Math.abs(cineVid.currentTime - want) > .15) cineVid.currentTime = want;
-    if (cineVid.paused) cineVid.play().catch(() => {});
+    if (Math.abs(v.currentTime - want) > .15) v.currentTime = want;
+    if (v.paused) v.play().catch(() => {});
     return true;
   }
-  if (CI.on) { CI.on = false; cineEl.classList.remove('on'); cineVid.pause(); }
+  if (CI.on) { CI.on = false; cineEl.classList.remove('on'); CI.vid.pause(); }
   const next = live ? CINE_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
-  if (next >= 0 && CI.primed !== next) { CI.primed = next; cineVid.currentTime = CINE_CUES[next].file; }
+  if (next >= 0 && CI.primed !== next) { CI.primed = next; cueVid(CINE_CUES[next]).currentTime = CINE_CUES[next].file; }
   // Before the song starts, sit on the opening frame.
-  if (!live && CI.primed !== 0 && audio.currentTime < 1) { CI.primed = 0; cineVid.currentTime = 0; }
+  if (!live && CI.primed !== 0 && audio.currentTime < 1) { CI.primed = 0; cineShow(CINE_VIDS.cine); CINE_VIDS.cine.currentTime = 0; }
   return false;
 }
 
