@@ -187,7 +187,7 @@
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
       <div class="rec" id="ccRec"><i></i>REC</div>
-      <div class="cam" id="ccCam">CAM 01<br>ARCADE · FLOOR 1</div>
+      <div class="cam" id="ccCam">CAM 01<br>RABBITCAM · FLOOR 1</div>
       <div class="ts" id="ccTs">07/11/2026 23:41:07</div>
       <div class="id">ULTRARABBIT SECURITY<br>SYS-UR-146</div>
       <div class="mid"></div>
@@ -1793,7 +1793,7 @@ const PR = { on: false, primed: -1 };
 // CCTV readout: the clock starts the night it was filmed and runs on the footage's own time, so it
 // is continuous within a shot and jumps between shots; the camera number follows the take's verse.
 const CC_START = 23 * 3600 + 41 * 60 + 7;
-const CC_CAMS = ['CAM 01<br>ARCADE · FLOOR 1', 'CAM 02<br>ARCADE · FLOOR 2', 'CAM 03<br>PRIZE ZONE', 'CAM 04<br>EXIT B'];
+const CC_CAMS = ['CAM 01<br>RABBITCAM · FLOOR 1', 'CAM 02<br>RABBITCAM · FLOOR 2', 'CAM 03<br>PRIZE ZONE', 'CAM 04<br>EXIT B'];
 const ccCache = {};
 const ccSet = (id, v, html = false) => {
   if (ccCache[id] === v) return;
