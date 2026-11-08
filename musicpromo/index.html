@@ -49,6 +49,10 @@
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background: repeating-linear-gradient(0deg, rgba(0,0,0,.11) 0 1px, transparent 1px 2px);
   }
+  /* Cinematic band clips, shown untouched: no grade, scan lines or CCTV frame. */
+  #cine { display: none; background: #000; }
+  #cine.on { display: block; }
+  #cine video { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* Only the footage's own fine lines while it's up, not the page-wide ones on top. */
   body.footage #scan { display: none; }
   body.footage:not(.directing) #hud { opacity: 0; }
@@ -183,6 +187,7 @@
   <canvas id="totem" class="layer"></canvas>
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
+  <div id="cine" class="layer"><video id="cineVid" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -958,6 +963,7 @@ const F = { cuts: 0, frames: 0, v: 0, z: 1, solid: false, kind: 'logo', totem: n
 })();
 
 function fever(n) {
+  if (FT.on) return;
   if (!logos.length) { flash = 1; return; }
   F.kind = 'logo';
   F.cuts = Math.max(F.cuts, Math.round(n));
@@ -1808,25 +1814,66 @@ function cctvUpdate(cue, fileTime) {
   $('ccRec').classList.toggle('off', (t % 1) > .5);
 }
 
-function promoUpdate() {
+// Cinematic clips in the instrumental gaps: song range [a, b) plays cine.mp4 from `file`.
+const CINE_CUES = [
+  { a: 0, b: 3.208, file: 0 },          // open: the pair walk in on red (cut before they look at each other)
+  { a: 26.599, b: 28.849, file: 3.208 }, // just before verse 1: close two-shot facing camera
+  { a: 49.5, b: 55.02, file: 5.458 },    // V1 > V2 gap: push into Eva's lenses, Andy reflected
+  { a: 75.67, b: 81.19, file: 11 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
+  { a: 101.842, b: 107.842, file: 16.542 }, // bridge: walking toward camera on white
+  { a: 246.85, b: 255, file: 22.542 },   // final shot: the ULTRARABBIT monolith
+];
+const cineEl = $('cine'), cineVid = $('cineVid');
+const CI = { on: false, primed: -1 };
+
+function cineUpdate(live, ct) {
+  const cue = live ? CINE_CUES.find((c) => ct >= c.a && ct < c.b) : null;
+  if (cue) {
+    const want = cue.file + ct - cue.a;
+    if (!CI.on) { CI.on = true; cineEl.classList.add('on'); }
+    if (Math.abs(cineVid.currentTime - want) > .15) cineVid.currentTime = want;
+    if (cineVid.paused) cineVid.play().catch(() => {});
+    return true;
+  }
+  if (CI.on) { CI.on = false; cineEl.classList.remove('on'); cineVid.pause(); }
+  const next = live ? CINE_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
+  if (next >= 0 && CI.primed !== next) { CI.primed = next; cineVid.currentTime = CINE_CUES[next].file; }
+  // Before the song starts, sit on the opening frame.
+  if (!live && CI.primed !== 0 && audio.currentTime < 1) { CI.primed = 0; cineVid.currentTime = 0; }
+  return false;
+}
+
+// Any live action on screen hides the lyrics and HUD.
+function footageUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
+  const on = cineUpdate(live, ct) | promoUpdate(live, ct);
+  if (on !== FT.on) {
+    FT.on = on;
+    document.body.classList.toggle('footage', !!on);
+    front.style.visibility = on ? 'hidden' : '';
+  }
+}
+const FT = { on: 0 };
+
+function promoUpdate(live, ct) {
   const cue = live ? PROMO_CUES.find((c) => ct >= c.a && ct < c.b) : null;
   if (cue) {
     const want = ct + cue.off - PROMO_OFFSET;
-    if (!PR.on) { PR.on = true; promoEl.classList.add('on'); document.body.classList.add('footage'); front.style.visibility = 'hidden'; }
+    if (!PR.on) { PR.on = true; promoEl.classList.add('on'); }
     cctvUpdate(cue, want);
     if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
     if (promoVid.paused) promoVid.play().catch(() => {});
-    return;
+    return true;
   }
-  if (PR.on) { PR.on = false; promoEl.classList.remove('on'); document.body.classList.remove('footage'); front.style.visibility = ''; promoVid.pause(); }
+  if (PR.on) { PR.on = false; promoEl.classList.remove('on'); promoVid.pause(); }
   // Park the footage on the next cue's first frame so the cut is instant.
   const next = live ? PROMO_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
   if (next >= 0 && PR.primed !== next) {
     PR.primed = next;
     promoVid.currentTime = PROMO_CUES[next].a + PROMO_CUES[next].off - PROMO_OFFSET;
   }
+  return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1934,7 +1981,7 @@ function frame() {
   t += dt;
   analyse(t, dt);
   stepMusicClock(dt);
-  promoUpdate();
+  footageUpdate();
   syncText();
 
   directPlayback();
@@ -1945,7 +1992,7 @@ function frame() {
     } else {
       textBeat();
       // Under direction only the director's cuts and LOGO cues fire.
-      if (!directed && !PR.on) {
+      if (!directed && !FT.on) {
         if (A.beatCount % 32 === 0) fever(rand(10, 16));
         else if (!isFlat(sceneName) && A.strength > .75 && Math.random() < .1) totemFlash(rand(2, 4));
         else if (A.strength > .9 && Math.random() < .25) fever(rand(2, 5));
