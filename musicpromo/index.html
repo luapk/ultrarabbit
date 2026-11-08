@@ -50,6 +50,9 @@
     background: repeating-linear-gradient(0deg, rgba(0,0,0,.11) 0 1px, transparent 1px 2px);
   }
   /* Cinematic band clips, shown untouched: no grade, scan lines or CCTV frame. */
+  /* 3D wireframe busts (intro loading screen, final-third chant scenes): on top of everything. */
+  #bust3d { display: none; width: 100%; height: 100%; z-index: 1; }
+  #bust3d.on { display: block; }
   #cine { display: none; background: #000; }
   #cine.on { display: block; }
   #cine video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -187,6 +190,7 @@
   <canvas id="totem" class="layer"></canvas>
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
+  <canvas id="bust3d" class="layer"></canvas>
   <div id="cine" class="layer"><video id="cineVid" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
@@ -261,6 +265,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="/totems.js"></script>
 <script src="/rabbit-run.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 <script>
 (() => {
 'use strict';
@@ -920,6 +926,8 @@ function drawTotem(g, tt, x, y, s, opts = {}) {
     tLine(g, x + s * 1.18, scanY - s * .04, x + s * 1.18, scanY + s * .04);
   }
 }
+// Shared with /musicpromo/busts.js for the intro HUD.
+window.drawTotem = drawTotem;
 
 /* ------------------------------------------------------------------ */
 /* Logo fever cuts                                                     */
@@ -1816,7 +1824,7 @@ function cctvUpdate(cue, fileTime) {
 
 // Cinematic clips in the instrumental gaps: song range [a, b) plays cine.mp4 from `file`.
 const CINE_CUES = [
-  { a: 0, b: 3.208, file: 0 },          // open: the pair walk in on red (cut before they look at each other)
+  { a: 14.742, b: 17.95, file: 0 },     // after the loading intro: the pair walk in on red (cut before they look at each other)
   { a: 26.599, b: 28.849, file: 3.208 }, // just before verse 1: close two-shot facing camera
   { a: 49.5, b: 55.02, file: 5.458 },    // V1 > V2 gap: push into Eva's lenses, Andy reflected
   { a: 75.67, b: 81.19, file: 11 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
@@ -1847,7 +1855,7 @@ function cineUpdate(live, ct) {
 function footageUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
-  const on = cineUpdate(live, ct) | promoUpdate(live, ct);
+  const on = cineUpdate(live, ct) | promoUpdate(live, ct) | (window.burrowBusts ? burrowBusts.update(ct, (ct - TRACK_GRID[0].phase) * TRACK_GRID[0].bpm / 60, live) : false);
   if (on !== FT.on) {
     FT.on = on;
     document.body.classList.toggle('footage', !!on);
@@ -2045,5 +2053,6 @@ const start = () => { resize(); setScene('FACE'); frame(); };
 (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start);
 })();
 </script>
+<script src="/musicpromo/busts.js"></script>
 </body>
 </html>
