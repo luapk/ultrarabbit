@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ULTRARABBIT // CLIP REVIEW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --red: #ff2d2d; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; color: #fff; font: 12px/1.5 "Fira Code", monospace; letter-spacing: .06em; padding: 0 0 120px; }
+  header { position: sticky; top: 0; z-index: 3; background: #000; border-bottom: 2px solid var(--red); }
+  .screen { position: relative; width: 100%; max-width: 860px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+  .screen video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.32) 0 1px, transparent 1px 2px); }
+  #now { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 6px 10px; background: rgba(0,0,0,.75); font: 400 22px/1.1 "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; }
+  #now small { font: 11px "Fira Code", monospace; color: #aaa; margin-left: 8px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: 860px; margin: 0 auto; padding: 8px 12px; }
+  .bar b { color: var(--red); }
+  main { max-width: 860px; margin: 0 auto; padding: 12px; display: grid; gap: 10px; }
+  .card { border: 2px solid #333; padding: 10px; display: grid; gap: 8px; }
+  .card.approved { border-color: #fff; }
+  .card.rejected { border-color: var(--red); }
+  .card.dropped { opacity: .45; }
+  .card.playing { outline: 2px dashed var(--red); outline-offset: 2px; }
+  .top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .lyric { font: 400 26px/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .04em; }
+  .meta { color: #aaa; }
+  .state { margin-left: auto; font-weight: 600; }
+  .rejected .state, .dropped .state { color: var(--red); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: 600 12px "Fira Code", monospace; letter-spacing: .08em; border: 0; padding: 10px 12px; cursor: pointer;
+    background: #000; color: #fff; outline: 1px solid #fff; touch-action: manipulation;
+  }
+  button.play { background: var(--red); color: #000; outline: 0; }
+  button.ok { background: #fff; color: #000; outline: 0; }
+  button.on { background: var(--red); color: #000; outline: 0; }
+  .alts { display: none; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .rejected .alts { display: flex; }
+  .alts span { color: #aaa; margin-right: 4px; }
+  #msg { color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <div class="screen">
+    <video id="v" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
+    <div id="now">TAP ▶ PLAY ON A LINE</div>
+  </div>
+  <div class="bar"><b>CLIP REVIEW</b><span id="count"></span>
+    <button id="playAll" class="play">▶ PLAY ALL</button>
+    <button id="copy">COPY DECISIONS</button>
+    <button id="reset">RESET</button>
+    <span id="msg"></span>
+  </div>
+</header>
+<main id="list"></main>
+
+<script>
+(() => {
+'use strict';
+// Every sung line the footage covers: song start time (s) and lyric. Footage file time = song time - OFFSET.
+const LINES = [{"t": 28.849, "text": "WE'RE BLASTING OFF"}, {"t": 30.485, "text": "WE'RE IN CONTROL"}, {"t": 32.121, "text": "YOU CAN'T HOLD US BACK"}, {"t": 33.756, "text": "WE'RE STANDING TALL"}, {"t": 35.392, "text": "THE WORLD IS OURS"}, {"t": 37.028, "text": "SO IT BEGINS"}, {"t": 38.663, "text": "THE ULTRARABBIT"}, {"t": 40.299, "text": "ALWAYS WINS"}, {"t": 41.935, "text": "THIS IS WHO WE ARE NOW"}, {"t": 44.184, "text": "THIS IS WHAT WE DO"}, {"t": 45.206, "text": "THIS IS WHO WE ARE NOW"}, {"t": 47.455, "text": "THIS IS WHAT WE DO"}, {"t": 55.02, "text": "WE'RE BEAUTIFUL"}, {"t": 56.656, "text": "WE'RE IN YOUR FACE"}, {"t": 58.292, "text": "WE'RE FIRST IN LINE"}, {"t": 59.927, "text": "OUR RIGHTFUL PLACE"}, {"t": 61.563, "text": "THE WORLD IS OURS"}, {"t": 63.199, "text": "SO IT BEGINS"}, {"t": 64.834, "text": "THE ULTRARABBIT"}, {"t": 66.47, "text": "ALWAYS WINS"}, {"t": 68.106, "text": "THIS IS WHO WE ARE NOW"}, {"t": 70.355, "text": "THIS IS WHAT WE DO"}, {"t": 71.377, "text": "THIS IS WHO WE ARE NOW"}, {"t": 73.626, "text": "THIS IS WHAT WE DO"}, {"t": 81.191, "text": "WE'RE COMING THROUGH"}, {"t": 82.827, "text": "WE'RE COMING FAST"}, {"t": 84.462, "text": "EAT OUR DUST"}, {"t": 86.098, "text": "WE'RE SCREAMING PAST"}, {"t": 87.734, "text": "THE WORLD IS OURS"}, {"t": 89.369, "text": "SO IT BEGINS"}, {"t": 91.005, "text": "THE ULTRARABBIT"}, {"t": 92.641, "text": "ALWAYS WINS"}, {"t": 94.276, "text": "THIS IS WHO WE ARE NOW"}, {"t": 96.526, "text": "THIS IS WHAT WE DO"}, {"t": 97.548, "text": "THIS IS WHO WE ARE NOW"}, {"t": 99.797, "text": "THIS IS WHAT WE DO"}];
+const OFFSET = 27.925, BEAT = 60 / 146.728, KEY = 'promo-selection-v1', DKEY = 'promo-review-v1';
+const DEFAULT = [0, 6, 7, 8, 10, 14, 18, 20, 22, 26, 31, 32, 34, 35];
+const $ = (id) => document.getElementById(id);
+const v = $('v'), audio = new Audio('/media/ThisIsWhoWeAre-192.mp3');
+audio.preload = 'auto';
+
+const label = (i) => `CLIP ${String(i).padStart(2, '0')} · V${Math.floor(i / 12) + 1} L${(i % 12) + 1}`;
+const stamp = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+const lineEnd = (i) => Math.min(LINES[i + 1] ? LINES[i + 1].t : Infinity, LINES[i].t + 5 * BEAT);
+const altsFor = (i) => LINES.map((l, j) => j).filter((j) => j !== i && LINES[j].text === LINES[i].text);
+
+// Decisions per selected line: { src, status: 'pending' | 'approved' | 'rejected' | 'dropped' }.
+let D = {};
+try { D = JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { D = {}; }
+for (const i of DEFAULT) if (!D[i]) D[i] = { src: i, status: 'pending' };
+
+function save() {
+  try {
+    localStorage.setItem(DKEY, JSON.stringify(D));
+    // /musicpromo on this device plays every line that isn't dropped, with its chosen footage.
+    const picks = DEFAULT.filter((i) => D[i].status !== 'dropped').map((i) => ({ line: i, src: D[i].src }));
+    localStorage.setItem(KEY, JSON.stringify(picks));
+  } catch (e) { /* private mode: decisions last this visit only */ }
+}
+
+/* ---------------- playback ---------------- */
+let timer = 0, queue = [];
+function play(line, src, then) {
+  clearTimeout(timer);
+  const a = LINES[line].t, pre = .35, stopAt = lineEnd(line) + .25;
+  audio.currentTime = Math.max(0, a - pre);
+  v.currentTime = Math.max(0, LINES[src].t - pre - OFFSET);
+  $('now').innerHTML = `${LINES[line].text}<small>${label(src)}${src !== line ? ' (ALT)' : ''} · ${stamp(a)}</small>`;
+  document.querySelectorAll('.card').forEach((c) => c.classList.toggle('playing', +c.dataset.line === line));
+  audio.play().catch(() => {});
+  v.play().catch(() => {});
+  const tick = () => {
+    // Keep the picture locked to the song while the line plays.
+    const want = audio.currentTime + (LINES[src].t - a) - OFFSET;
+    if (Math.abs(v.currentTime - want) > .12) v.currentTime = want;
+    if (audio.currentTime >= stopAt) {
+      audio.pause(); v.pause();
+      document.querySelectorAll('.card.playing').forEach((c) => c.classList.remove('playing'));
+      if (then) then();
+      return;
+    }
+    timer = setTimeout(tick, 40);
+  };
+  timer = setTimeout(tick, 60);
+}
+function playAll() {
+  queue = DEFAULT.filter((i) => D[i].status !== 'dropped');
+  const next = () => {
+    const i = queue.shift();
+    if (i === undefined) return;
+    document.querySelector(`.card[data-line="${i}"]`).scrollIntoView({ block: 'center', behavior: 'smooth' });
+    play(i, D[i].src, () => setTimeout(next, 500));
+  };
+  next();
+}
+
+/* ---------------- list ---------------- */
+const STATE = { pending: 'TO REVIEW', approved: '✓ APPROVED', rejected: '✗ REJECTED · PICK AN ALT', dropped: 'DROPPED' };
+function render() {
+  const list = $('list');
+  list.replaceChildren();
+  for (const i of DEFAULT) {
+    const d = D[i], alts = altsFor(i);
+    const card = document.createElement('div');
+    card.className = 'card ' + d.status;
+    card.dataset.line = i;
+    card.innerHTML = `
+      <div class="top"><span class="lyric">${LINES[i].text}</span>
+        <span class="meta">${stamp(LINES[i].t)} · footage ${label(d.src)}${d.src !== i ? ' (alt)' : ''}</span>
+        <span class="state">${STATE[d.status]}</span></div>
+      <div class="row">
+        <button class="play">▶ PLAY</button>
+        <button class="ok">✓ APPROVE</button>
+        <button class="no">✗ REJECT</button>
+        <button class="drop">${d.status === 'dropped' ? 'RESTORE' : 'DROP LINE'}</button>
+      </div>
+      <div class="alts">
+        <span>${alts.length ? 'ALTERNATIVES (same lyric, tap to audition):' : 'NO OTHER TAKE OF THIS LINE: APPROVE OR DROP IT'}</span>
+        ${alts.length ? [i, ...alts].map((j) => `<button class="alt${j === d.src ? ' on' : ''}" data-src="${j}">▶ ${label(j)}${j === i ? ' (ORIGINAL)' : ''}</button>`).join('') : ''}
+      </div>`;
+    const q = (sel) => card.querySelector(sel);
+    q('.play').onclick = () => play(i, d.src);
+    q('.ok').onclick = () => { d.status = 'approved'; save(); render(); };
+    q('.no').onclick = () => { d.status = 'rejected'; save(); render(); };
+    q('.drop').onclick = () => { d.status = d.status === 'dropped' ? 'pending' : 'dropped'; save(); render(); };
+    card.querySelectorAll('.alt').forEach((b) => {
+      b.onclick = () => { d.src = +b.dataset.src; save(); render(); play(i, d.src); };
+    });
+    list.append(card);
+  }
+  const n = (s) => DEFAULT.filter((i) => D[i].status === s).length;
+  $('count').textContent = `${n('approved')}/${DEFAULT.length} APPROVED · ${n('rejected')} REJECTED · ${n('dropped')} DROPPED`;
+}
+
+$('playAll').onclick = playAll;
+$('reset').onclick = () => {
+  if (!confirm('Clear all decisions?')) return;
+  D = {};
+  for (const i of DEFAULT) D[i] = { src: i, status: 'pending' };
+  save();
+  render();
+};
+$('copy').onclick = async () => {
+  const out = DEFAULT.map((i) => ({ line: i, lyric: LINES[i].text, footage: D[i].src, status: D[i].status }));
+  const text = 'PROMO_REVIEW ' + JSON.stringify(out);
+  try { await navigator.clipboard.writeText(text); $('msg').textContent = 'COPIED'; }
+  catch (e) { window.prompt('Copy these decisions:', text); }
+};
+save();
+render();
+})();
+</script>
+</body>
+</html>

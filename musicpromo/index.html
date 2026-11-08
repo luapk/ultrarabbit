@@ -1717,20 +1717,37 @@ $('dCopy').addEventListener('click', async () => {
 /* Band footage cut-ins (This Is Who We Are)                           */
 /* ------------------------------------------------------------------ */
 
-// Song-time ranges where the band's lip-sync footage takes the screen. The footage file starts
-// at song time PROMO_OFFSET (the phone video was matched to the master at +11.925s, then trimmed
-// from its 16s mark), so file time = song time - PROMO_OFFSET.
+// The band's lip-sync footage cuts in on chosen lines. Each pick is { line, src }: the song line
+// it plays on, and the line whose footage is shown (same lyric, possibly another verse, so the
+// lips still match). The footage file starts at song time PROMO_OFFSET (the phone video matched
+// the master at +11.925s, trimmed from its 16s mark): file time = song time - PROMO_OFFSET.
+// Picks made on /musicpromo/review are saved on this device and override the default.
 const PROMO_OFFSET = 27.925;
-const PROMO_CUES = [[28.849, 30.485], [38.663, 43.98], [45.206, 47.251], [58.292, 59.927], [64.834, 66.47], [68.106, 70.151], [71.377, 73.422], [84.462, 86.098], [92.641, 96.321], [97.548, 99.593], [99.797, 101.842]];
+const PROMO_DEFAULT = [0, 6, 7, 8, 10, 14, 18, 20, 22, 26, 31, 32, 34, 35].map((i) => ({ line: i, src: i }));
+const PROMO_KEY = 'promo-selection-v1';
+let promoPicks = PROMO_DEFAULT;
+try {
+  const saved = JSON.parse(localStorage.getItem(PROMO_KEY));
+  if (Array.isArray(saved)) promoPicks = saved;
+} catch (e) { /* default picks */ }
+const PROMO_CUES = (() => {
+  const st = BAKED_SYNC[0], beat = 60 / TRACK_GRID[0].bpm;
+  return promoPicks
+    .map(({ line, src }) => {
+      const a = st[line], b = Math.min(st[line + 1] ?? Infinity, a + 5 * beat);
+      return { a, b, off: st[src] - a };
+    })
+    .sort((x, y) => x.a - y.a);
+})();
 const promoEl = $('promo'), promoVid = $('promoVid');
 const PR = { on: false, primed: -1 };
 
 function promoUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
-  const cue = live ? PROMO_CUES.find(([a, b]) => ct >= a && ct < b) : null;
+  const cue = live ? PROMO_CUES.find((c) => ct >= c.a && ct < c.b) : null;
   if (cue) {
-    const want = ct - PROMO_OFFSET;
+    const want = ct + cue.off - PROMO_OFFSET;
     if (!PR.on) { PR.on = true; promoEl.classList.add('on'); front.style.visibility = 'hidden'; }
     if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
     if (promoVid.paused) promoVid.play().catch(() => {});
@@ -1738,8 +1755,11 @@ function promoUpdate() {
   }
   if (PR.on) { PR.on = false; promoEl.classList.remove('on'); front.style.visibility = ''; promoVid.pause(); }
   // Park the footage on the next cue's first frame so the cut is instant.
-  const next = live ? PROMO_CUES.findIndex(([a]) => a > ct && a - ct < 2) : -1;
-  if (next >= 0 && PR.primed !== next) { PR.primed = next; promoVid.currentTime = PROMO_CUES[next][0] - PROMO_OFFSET; }
+  const next = live ? PROMO_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
+  if (next >= 0 && PR.primed !== next) {
+    PR.primed = next;
+    promoVid.currentTime = PROMO_CUES[next].a + PROMO_CUES[next].off - PROMO_OFFSET;
+  }
 }
 
 /* ------------------------------------------------------------------ */
