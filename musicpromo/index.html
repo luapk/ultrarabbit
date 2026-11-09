@@ -1825,15 +1825,21 @@ function cctvUpdate(cue, fileTime) {
   $('ccRec').classList.toggle('off', (t % 1) > .5);
 }
 
-// Cinematic clips in the instrumental gaps: song range [a, b) plays `vid` (cine.mp4 unless named)
+// Cinematic clips in the instrumental gaps (cine.mp4 is 1080p; the ride-selfie moments, 6 beats each, sit
+// in lyric-free stretches): song range [a, b) plays `vid` (cine.mp4 unless named)
 // from `file`.
 const CINE_CUES = [
   { a: 14.742, b: 17.95, file: 0 },     // after the loading intro: the pair walk in on red (cut before they look at each other)
+  { a: 21.284, b: 23.738, file: 30.542 }, // ride selfie: Andy fist-pumps, then reaches for the lens
   { a: 26.599, b: 28.849, file: 3.208 }, // just before verse 1: close two-shot facing camera
   { a: 49.5, b: 55.02, file: 5.458 },    // V1 > V2 gap: push into Eva's lenses, Andy reflected
   { a: 75.67, b: 81.19, file: 11 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
   { a: 101.842, b: 107.842, file: 16.542 }, // bridge: walking toward camera on white
+  { a: 111.247, b: 113.7, file: 33.042 },   // ride selfie: Eva screams, camera whips
+  { a: 119.425, b: 121.879, file: 35.5 },   // ride selfie: car swerves, Eva throws an arm up
+  { a: 186.488, b: 188.941, file: 37.958 }, // ride selfie: Andy lunges at camera, whip pan
   { a: 199.58, b: 219.58, file: 0, vid: 'coaster' }, // instrumental after "this is our time": RABBIT RUSH coaster ride
+  { a: 235.558, b: 238.012, file: 40.417 }, // ride selfie: grinning, ears in the wind
   { a: 246.85, b: 255, file: 22.542 },   // final shot: the ULTRARABBIT monolith
 ];
 const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), coaster: $('coasterVid') };
