@@ -1490,22 +1490,23 @@ const RUN_COLS = [HEX.red, HEX.black, HEX.white];
 // Four frames per beat: one stride every two beats, close to the drawing's own 10fps.
 const runFrame = (offset = 0) => (((Math.floor(MC.v * 4) + offset) % 8) + 8) % 8;
 
-// Russian dolls: each rabbit holds a smaller one (x 1/phi) running a couple of frames behind,
-// and the view zooms in one doll per bar, forever.
+// Russian dolls as a tunnel: rabbits nested round one vanishing point in the middle, each the last
+// shrunk by phi squared, all running the same way. Like the rings in the live-action tunnel, they
+// rush out of the distance towards the camera; a new one appears tiny at the centre every bar.
 S.RUN_DOLL = totemScene({
   init() { this.punch = 0; },
   onBeat() { this.punch = 1; },
   draw(g, W, H, dt, ph) {
     this.punch *= Math.exp(-dt * 8);
-    const beats = MC.v, gen = Math.floor(beats / 4), u = (beats / 4) % 1;
-    const big = Math.max(W / RUN_W, H) * 1.7 * (1 + this.punch * .03);
+    const beats = MC.v, gen = Math.floor(beats / 4), u = (beats / 4) % 1, STEP = PHI * PHI;
+    const big = Math.max(W / RUN_W, H) * 1.5 * (1 + this.punch * .03);
     g.fillStyle = RUN_COLS[(gen + 2) % 3];
     g.fillRect(0, 0, W, H);
     for (let k = 0; ; k++) {
-      const h = big * PHI ** (u - k);
-      if (h < 5) break;
+      const h = big * STEP ** (u - k);
+      if (h < 6) break;
       const fill = RUN_COLS[(k + gen) % 3], line = RUN_COLS[(k + gen + 1) % 3];
-      drawRun(g, runFrame(-2 * k), W / 2, H / 2 + h * .06, h, line, fill, (k + gen) % 2 === 1);
+      drawRun(g, runFrame(-2 * k), W / 2, H / 2, h, line, fill, false);
     }
   },
 });
