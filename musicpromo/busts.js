@@ -12,8 +12,10 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const COLS = ['#ff2d2d', '#000000', '#ffffff'];
 
 const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where the red walk cuts in
-const EVA = { a: 148.868, b: 165.225 };     // bars 91-101, from the first chanted "ultrarabbit"
-const ANDY = { a: 165.225, b: 181.582 };    // bars 101-111, ending into the 3:02.6 "ultrarabbit"
+// Each orbit is planned over its full 10 bars (a..b) but only its second half is shown (from `on`),
+// so it opens already halfway in and keeps the same ending.
+const EVA = { a: 148.868, on: 157.046, b: 165.225 };   // bars 91-101; shown 96-101
+const ANDY = { a: 165.225, on: 173.404, b: 181.582 };  // bars 101-111, ending into the 3:02.6 "ultrarabbit"; shown 106-111
 const LOGO = { fadeIn: 2.2, glitch: 3.0, glow: 3.6 };
 const LOADED = { eva: 11.4, andy: 12.6, module: 12.9 };
 
@@ -105,8 +107,10 @@ function goldenSquares(w, h) {
     }
     return { sq, eye: { x: x + ww / 2, y: y + hh / 2 } };
   };
-  const x0 = (w - w0) / 2, y0 = (h - h0) / 2, eye = build(x0, y0, w0, h0, 0, 40).eye, kk = PHI ** 5;
-  return { eye, sq: build(eye.x + (x0 - eye.x) * kk, eye.y + (y0 - eye.y) * kk, w0 * kk, h0 * kk, -5, 32).sq };
+  // The oversized starting rectangle is a whole turn (four squares, phi^4) out, so the construction
+  // starts on the same side it would at i = 0 and every square lands where the spiral needs it.
+  const x0 = (w - w0) / 2, y0 = (h - h0) / 2, eye = build(x0, y0, w0, h0, 0, 40).eye, kk = PHI ** 4;
+  return { eye, sq: build(eye.x + (x0 - eye.x) * kk, eye.y + (y0 - eye.y) * kk, w0 * kk, h0 * kk, -4, 36).sq };
 }
 
 // Eva: golden rectangles zooming into the spiral by phi and a quarter turn per bar.
@@ -328,8 +332,8 @@ let shown = false;
 function update(t, beats, live) {
   const which = !live ? null
     : t < INFLECT ? 'intro'
-    : t >= EVA.a && t < EVA.b ? 'eva'
-    : t >= ANDY.a && t < ANDY.b ? 'andy' : null;
+    : t >= EVA.on && t < EVA.b ? 'eva'
+    : t >= ANDY.on && t < ANDY.b ? 'andy' : null;
   const on = !!which && !!meshes.eva && !!meshes.andy;
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
   if (!on) return false;
