@@ -11,13 +11,40 @@ const eOut = (p) => 1 - (1 - p) ** 3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const COLS = ['#ff2d2d', '#000000', '#ffffff'];
 
-const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where the red walk cuts in
+const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where it match-cuts to the band clip
 // Each orbit is planned over its full 10 bars (a..b) but only its second half is shown (from `on`),
 // so it opens already halfway in and keeps the same ending.
 const EVA = { a: 148.868, on: 157.046, b: 165.225 };   // bars 91-101; shown 96-101
 const ANDY = { a: 165.225, on: 173.404, b: 181.582 };  // bars 101-111, ending into the 3:02.6 "ultrarabbit"; shown 106-111
 const LOGO = { fadeIn: 2.2, glitch: 3.0, glow: 3.6 };
 const LOADED = { eva: 11.4, andy: 12.6, module: 12.9 };
+// Match cut: the intro ends on the band clip (/ULTRARABBIT.mp4, 720x1280, shown object-fit: cover at
+// object-position 50% 20%). Each head settles on its place in that clip's first frame. Anchored on the
+// sunglasses: gy is the glasses' height in the model, ty the top of the head (crown, not ears), neck
+// where the head is cut off; (vx, vy) the glasses in clip pixels, vt the crown's clip y; ry the turn.
+const CLIP = { w: 720, h: 1280, ox: .5, oy: .2 };
+const MATCH = {
+  andy: { gy: .54, ty: .9, neck: .2, vx: 160, vy: 245, vt: 30, ry: .1 },
+  eva: { gy: .2, ty: .47, neck: -.12, vx: 562, vy: 505, vt: 300, ry: -.15 },
+};
+const MCAM = { fov: 30, d: 8 };
+const SETTLE = 13.9;
+function matchHead(name, t) {
+  const M = MATCH[name];
+  const s = Math.max(W / CLIP.w, H / CLIP.h), ox = (W - CLIP.w * s) * CLIP.ox, oy = (H - CLIP.h * s) * CLIP.oy;
+  const sx = ox + M.vx * s, sy = oy + M.vy * s;
+  const wpp = 2 * MCAM.d * Math.tan(MCAM.fov * Math.PI / 360) / H;       // world units per screen px at z = 0
+  const scale = ((M.vy - M.vt) * s * wpp) / (M.ty - M.gy);
+  const match = { x: (sx - W / 2) * wpp, y: (H / 2 - sy) * wpp - M.gy * scale, scale };
+  // While loading they sit comfortably in their own halves, the same size; once MODULE LOADED is up
+  // they push in to the match pose, arriving at SETTLE.
+  const hx = (name === 'andy' ? .27 : .73) * W, hy = H * .44, hpx = Math.min(H * .15, W * .16);
+  const hs = (hpx * wpp) / (M.ty - M.gy);
+  const home = { x: (hx - W / 2) * wpp, y: (H / 2 - hy) * wpp - M.gy * hs, scale: hs };
+  const k = eInOut(clamp((t - LOADED.module) / (SETTLE - LOADED.module), 0, 1));
+  return { x: home.x + (match.x - home.x) * k, y: home.y + (match.y - home.y) * k, scale: home.scale * (match.scale / home.scale) ** k };
+}
+const eInOut = (p) => p * p * (3 - 2 * p);
 
 const canvas = document.getElementById('bust3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -32,11 +59,12 @@ const res = new THREE.Vector2();
 // Wire colour is chosen per pixel from the background behind it (black over light, white over dark
 // or red). Above uReveal the mesh isn't loaded yet; a red line marks the loading edge.
 const wireMat = () => new THREE.ShaderMaterial({
-  uniforms: { uBg: { value: bgTex }, uRes: { value: res }, uReveal: { value: 2 } },
+  uniforms: { uBg: { value: bgTex }, uRes: { value: res }, uReveal: { value: 2 }, uLo: { value: -.95 }, uHi: { value: .95 } },
   vertexShader: 'varying float vY; void main() { vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
-  fragmentShader: `uniform sampler2D uBg; uniform vec2 uRes; uniform float uReveal; varying float vY;
+  fragmentShader: `uniform sampler2D uBg; uniform vec2 uRes; uniform float uReveal, uLo, uHi; varying float vY;
     void main() {
-      float h = (vY + .95) / 1.9;
+      if (vY < uLo) discard;   // the intro shows heads only: nothing below the neck
+      float h = (vY - uLo) / (uHi - uLo);
       if (h > uReveal) discard;
       vec3 b = texture2D(uBg, gl_FragCoord.xy / uRes).rgb;
       vec3 c = vec3(dot(b, vec3(.299, .587, .114)) > .6 ? 0. : 1.);
@@ -269,7 +297,7 @@ function drawHud(t, beats) {
   // 24 visible steps; never shows 100% until loading has actually finished, so it can't flick back.
   const steps = (p) => (p >= 1 ? 1 : Math.min(23, Math.floor(p * 24)) / 24);
   const pe = steps(prog(0, LOADED.eva)), pa = steps(prog(.8, LOADED.andy));
-  const bars = [['SUBJECT 01 · EVA', .25 * w, pe], ['SUBJECT 02 · ANDY', .75 * w, pa]];
+  const bars = [['SUBJECT 01 · ANDY', .25 * w, pa], ['SUBJECT 02 · EVA', .75 * w, pe]];
   for (const [name, x, p] of bars) {
     const bw = w < h ? w * .38 : Math.min(w * .3, 300 * u), bx = x - bw / 2, by = h - m - 34 * u;
     g.fillStyle = '#fff'; g.font = `600 ${12 * u}px "Fira Code", ui-monospace, monospace`; g.textAlign = 'left';
@@ -356,21 +384,29 @@ function update(t, beats, live) {
     if (t < LOGO.glow) drawLogo(t); else loads = drawHud(t, beats);
     introSfx(t, beats, loads);
     if (t >= LOGO.glow) {
-      // Heads left and right, turning slowly as they load from the base up.
-      // Landscape: side by side. Portrait: Eva above Andy.
-      const portrait = W < H;
+      // Heads only, same size, turning as they load, then easing round to face camera and settling
+      // exactly where the two heads are in the first frame of the band clip the intro cuts to.
       eva.visible = andy.visible = true;
-      if (portrait) { eva.position.set(0, .95, 0); andy.position.set(0, -.85, 0); eva.scale.setScalar(.85); andy.scale.setScalar(.85); }
-      else { eva.position.set(-1.2, .26, 0); andy.position.set(1.2, .26, 0); eva.scale.setScalar(1.08); andy.scale.setScalar(1.08); }
-      eva.rotation.y = .5 + t * .35; andy.rotation.y = -.5 - t * .35;
+      for (const [name, m, dir] of [['eva', eva, 1], ['andy', andy, -1]]) {
+        const P = matchHead(name, t);
+        m.material.uniforms.uLo.value = MATCH[name].neck; m.material.uniforms.uHi.value = .95;
+        m.scale.setScalar(P.scale);
+        m.position.set(P.x, P.y, 0);
+        // Spin that decelerates to land on the clip's pose at SETTLE and holds there.
+        const x = Math.max(0, SETTLE - t), f = x > 1 ? x - .5 : x * x / 2;
+        m.rotation.y = MATCH[name].ry + dir * .9 * f;
+      }
       const flick = (p) => (p > 0 && p < 1 && Math.random() < .04 ? p - .08 : p);
       eva.material.uniforms.uReveal.value = flick(loads[0]) * 1.02;
       andy.material.uniforms.uReveal.value = flick(loads[1]) * 1.02;
-      cam.fov = 38; cam.updateProjectionMatrix();
-      cam.position.set(0, portrait ? .05 : .2, portrait ? 5.6 : 4.1); cam.lookAt(0, portrait ? .05 : .15, 0);
+      cam.fov = MCAM.fov; cam.updateProjectionMatrix();
+      cam.position.set(0, 0, MCAM.d); cam.lookAt(0, 0, 0);
     }
   }
-  if (which !== 'intro') { eva.scale.setScalar(1); andy.scale.setScalar(1); }
+  if (which !== 'intro') {
+    eva.scale.setScalar(1); andy.scale.setScalar(1);
+    for (const m of [eva, andy]) { m.material.uniforms.uLo.value = -.95; m.material.uniforms.uHi.value = .95; }
+  }
   bgTex.needsUpdate = true;
   renderer.render(scene, cam);
   return true;
