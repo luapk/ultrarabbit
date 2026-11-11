@@ -194,7 +194,7 @@
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
   <canvas id="bust3d" class="layer"></canvas>
-  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="coasterVid" muted playsinline preload="auto" src="/musicpromo/coaster.mp4"></video><video id="bandpageVid" muted playsinline preload="auto" src="/ULTRARABBIT.mp4"></video></div>
+  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="bandpageVid" muted playsinline preload="auto" src="/ULTRARABBIT.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -1834,17 +1834,18 @@ function cctvUpdate(cue, fileTime) {
 const CINE_CUES = [
   { a: 14.742, b: 18.076, file: 0, vid: 'bandpage' }, // match cut from the loader's wireframe heads to the band clip, side by side
   { a: 18.076, b: 21.284, file: 0 },    // then the pair walk in on red (cut before they look at each other)
-  { a: 28.849, b: 32.734, file: 0, vid: 'coaster' }, // "we're blasting off": RABBIT RUSH opener, wide zoom into Eva's sunglasses
+  { a: 28.849, b: 38.974, file: 0, vid: 'ride' },   // "we're blasting off": live-action RABBIT RUSH opener (chase, front-on, into Eva's lens) with arcade HUD
   { a: 49.5, b: 55.0, file: 5.458 },     // V1 > V2 gap: Eva headshot in red space, push into her sunglasses: a tunnel of rabbit masks in the lens
   { a: 75.67, b: 81.19, file: 10.958 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
   { a: 101.842, b: 107.842, file: 16.5 }, // bridge: walking toward camera on white
   { a: 111.247, b: 113.7, file: 33.0 },   // ride selfie: Eva screams with laughter, camera whips
   { a: 113.7, b: 116.154, file: 30.5 },   // ride selfie, straight after: Andy fist-pumps, then reaches for the lens
+  { a: 116.154, b: 126.946, file: 10.125, vid: 'ride' }, // rest of the bridge break: the ULTRARABBIT monolith, car out of its mouth, hyperspeed ring tunnel
   { a: 186.488, b: 188.941, file: 35.458 },   // ride selfie: Andy lunges at camera, whip pan
-  { a: 199.597, b: 215.68, file: 3.917, vid: 'coaster' }, // instrumental after "this is our time": the rest of the RABBIT RUSH ride
+  { a: 199.597, b: 211.722, file: 20.917, vid: 'ride' }, // instrumental after "this is our time": live-action spiral dive round the totem tower
   { a: 246.85, b: 255, file: 22.5 },   // final shot: the ULTRARABBIT monolith
 ];
-const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), coaster: $('coasterVid'), bandpage: $('bandpageVid') };
+const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), bandpage: $('bandpageVid') };
 const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
 const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
 // Show one of the cinematic videos, pausing the other.
