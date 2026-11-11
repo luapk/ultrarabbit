@@ -49,6 +49,13 @@
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background: repeating-linear-gradient(0deg, rgba(0,0,0,.11) 0 1px, transparent 1px 2px);
   }
+  /* The CCTV footage plays on a 3D red TV (tv3d.js): the video only feeds its screen, which carries
+     its own readout and scan lines. Without WebGL it falls back to the flat CCTV frame. */
+  #tv3d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+  #promo.tv #tv3d { display: block; }
+  #promo.tv video { position: absolute; width: 2px; height: 2px; opacity: 0; }
+  #promo.tv .cctv { display: none; }
+  #promo.tv::after { display: none; }
   /* Cinematic band clips, shown untouched: no grade, scan lines or CCTV frame. */
   /* 3D wireframe busts (intro loading screen, final-third chant scenes): on top of everything. */
   #bust3d { display: none; width: 100%; height: 100%; z-index: 1; }
@@ -195,7 +202,7 @@
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
   <canvas id="bust3d" class="layer"></canvas>
   <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="bandpageVid" muted playsinline preload="auto" src="/ULTRARABBIT.mp4"></video></div>
-  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
+  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video><canvas id="tv3d"></canvas>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
       <div class="rec" id="ccRec"><i></i>REC</div>
@@ -1807,6 +1814,12 @@ const PROMO_CUES = (() => {
     })
     .sort((x, y) => x.a - y.a);
 })();
+// Back-to-back cues share one run, so the TV camera's orbit carries straight on across the cut.
+PROMO_CUES.forEach((c, i) => {
+  const p = PROMO_CUES[i - 1];
+  c.run = p && c.a - p.b < .05 ? p.run : { a: c.a, b: c.b };
+  c.run.b = c.b;
+});
 const promoEl = $('promo'), promoVid = $('promoVid');
 const PR = { on: false, primed: -1 };
 
@@ -1814,7 +1827,7 @@ const PR = { on: false, primed: -1 };
 // is continuous within a shot and jumps between shots; the camera number follows the take's verse.
 const CC_START = 23 * 3600 + 41 * 60 + 7;
 const CC_CAMS = ['CAM 01<br>RABBITCAM · FLOOR 1', 'CAM 02<br>RABBITCAM · FLOOR 2', 'CAM 03<br>PRIZE ZONE', 'CAM 04<br>EXIT B'];
-const ccCache = {};
+const ccCache = {}, CCOV = { ts: '', cam: CC_CAMS[0], rec: true };
 const ccSet = (id, v, html = false) => {
   if (ccCache[id] === v) return;
   ccCache[id] = v;
@@ -1823,9 +1836,12 @@ const ccSet = (id, v, html = false) => {
 function cctvUpdate(cue, fileTime) {
   const t = CC_START + fileTime + PROMO_OFFSET - 11.925;
   const p2 = (n) => String(Math.floor(n)).padStart(2, '0');
-  ccSet('ccTs', `07/11/2026 ${p2(t / 3600 % 24)}:${p2(t / 60 % 60)}:${p2(t % 60)}:${p2((t % 1) * 25)}`);
-  ccSet('ccCam', CC_CAMS[Math.min(3, Math.floor(cue.src / 12))], true);
-  $('ccRec').classList.toggle('off', (t % 1) > .5);
+  CCOV.ts = `07/11/2026 ${p2(t / 3600 % 24)}:${p2(t / 60 % 60)}:${p2(t % 60)}:${p2((t % 1) * 25)}`;
+  CCOV.cam = CC_CAMS[Math.min(3, Math.floor(cue.src / 12))];
+  CCOV.rec = (t % 1) <= .5;
+  ccSet('ccTs', CCOV.ts);
+  ccSet('ccCam', CCOV.cam, true);
+  $('ccRec').classList.toggle('off', !CCOV.rec);
 }
 
 // Cinematic clips in the instrumental gaps (cine.mp4 is 1080p; the ride-selfie moments, 6 beats each, sit
@@ -1894,6 +1910,8 @@ function promoUpdate(live, ct) {
     cctvUpdate(cue, want);
     if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
     if (promoVid.paused) promoVid.play().catch(() => {});
+    const k = (ct - cue.run.a) / (cue.run.b - cue.run.a);
+    promoEl.classList.toggle('tv', !!(window.tvCCTV && tvCCTV.update(promoVid, k, CCOV)));
     return true;
   }
   if (PR.on) { PR.on = false; promoEl.classList.remove('on'); promoVid.pause(); }
@@ -2076,5 +2094,9 @@ const start = () => { resize(); setScene('FACE'); frame(); };
 })();
 </script>
 <script src="/musicpromo/busts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="/musicpromo/tv3d.js"></script>
 </body>
 </html>
