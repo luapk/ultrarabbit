@@ -1813,17 +1813,17 @@ function cctvUpdate(cue, fileTime) {
 // in lyric-free stretches): song range [a, b) plays `vid` (cine.mp4 unless named)
 // from `file`.
 const CINE_CUES = [
-  { a: 18.076, b: 21.284, file: 0 },    // then the pair walk in on red (cut before they look at each other)
+  { a: 18.076, b: 28.849, file: 0 },    // long slow-mo walk on red (FPV push in), tracker overlay from halfway, straight into the opener
   { a: 28.849, b: 38.974, file: 0, vid: 'ride' },   // "we're blasting off": live-action RABBIT RUSH opener (chase, front-on, into Eva's lens) with arcade HUD
-  { a: 52.363, b: 55.0, file: 8.321 },   // V1 > V2 gap: Eva (B&W on red) from the moment the rabbit-mask tunnel appears in her lens
-  { a: 78.124, b: 81.19, file: 13.412 },  // V2 > V3 gap: Andy (B&W) from the moment the duo appears reflected in his glasses
-  { a: 101.842, b: 107.842, file: 16.5 }, // bridge: walking toward camera on white
-  { a: 111.247, b: 113.7, file: 33.0, tv: 1 },   // ride selfie (on the TV): Eva screams with laughter, camera whips
-  { a: 113.7, b: 116.154, file: 30.5, tv: 1 },   // ride selfie (on the TV), straight after: Andy fist-pumps, then reaches for the lens
+  { a: 52.363, b: 55.0, file: 15.946 },   // V1 > V2 gap: Eva (B&W on red) from the moment the rabbit-mask tunnel appears in her lens
+  { a: 78.124, b: 81.19, file: 21.037 },  // V2 > V3 gap: Andy (B&W) from the moment the duo appears reflected in his glasses
+  { a: 101.842, b: 107.842, file: 24.125 }, // bridge: walking toward camera on white
+  { a: 111.247, b: 113.7, file: 40.625, tv: 1 },   // ride selfie (on the TV): Eva screams with laughter, camera whips
+  { a: 113.7, b: 116.154, file: 38.125, tv: 1 },   // ride selfie (on the TV), straight after: Andy fist-pumps, then reaches for the lens
   { a: 116.154, b: 126.946, file: 10.125, vid: 'ride' }, // rest of the bridge break: the ULTRARABBIT monolith, car out of its mouth, hyperspeed ring tunnel
-  { a: 186.488, b: 188.941, file: 35.458, tv: 1 },   // ride selfie (on the TV): Andy lunges at camera, whip pan
+  { a: 186.488, b: 188.941, file: 43.083, tv: 1 },   // ride selfie (on the TV): Andy lunges at camera, whip pan
   { a: 199.597, b: 211.722, file: 20.917, vid: 'ride' }, // instrumental after "this is our time": live-action spiral dive round the totem tower
-  { a: 246.85, b: 255, file: 22.5 },   // final shot: the ULTRARABBIT monolith
+  { a: 246.85, b: 255, file: 30.125 },   // final shot: the ULTRARABBIT monolith
 ];
 // Cues marked tv play on the 3D TV; back-to-back ones share one orbit.
 CINE_CUES.forEach((c, i) => {
