@@ -427,6 +427,7 @@ function update(t, beats, live, idle) {
       andyBody.material.uniforms.uReveal.value = flick(loads[1]) * 1.02;
       cam.fov = MCAM.fov; cam.updateProjectionMatrix();
       cam.position.set(0, 0, MCAM.d); cam.lookAt(0, 0, 0);
+      trackerData(t, [['andy', andyBody, loads[1]], ['eva', evaBody, loads[0]]]);
     }
   }
   if (which !== 'intro') {
@@ -468,6 +469,83 @@ function drawCalmLogo(t, beats) {
   g.globalCompositeOperation = 'lighter'; g.globalAlpha *= .22 + .28 * Math.exp(-ph * 4);
   g.drawImage(logoGlow, lx - lw * .03, ly - lh * .03, lw * 1.06, lh * 1.06);
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+}
+
+// Tracker read-out over the loading wireframes (same language as the walk tracker): short-lived
+// sample boxes on real vertices, clustered at the loading edge, with tiny live numbers pushed outward;
+// thin links between vertices that flicker in and out; a face tracker per figure once its head is in.
+const TR = { pool: [], last: 0 };
+const _v = new THREE.Vector3();
+const rnd = Math.random;
+const trNum = () => [() => rnd().toFixed(4), () => Math.floor(rnd() * 65536).toString(16).toUpperCase().padStart(4, '0'),
+  () => (rnd() * 60 - 30).toFixed(1), () => String(Math.floor(rnd() * 360)).padStart(3, '0') + '°'][Math.floor(rnd() * 4)]();
+function toScreen(m, i) {
+  const p = m.geometry.attributes.position;
+  _v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(m.matrixWorld).project(cam);
+  return [(_v.x + 1) / 2 * ov.width, (1 - _v.y) / 2 * ov.height];
+}
+function trackerData(t, figs) {
+  const u = Math.min(ov.width, ov.height) / 540, fs = Math.max(6, 7 * u);
+  cam.updateMatrixWorld(); figs.forEach(([, m]) => m.updateMatrixWorld());
+  const spawn = t - TR.last > 1 / 30;
+  if (spawn) TR.last = t;
+  og.save(); og.lineWidth = 1; og.font = `${fs}px "Fira Code", ui-monospace, monospace`; og.textBaseline = 'middle';
+  figs.forEach(([name, m, load], fi) => {
+    if (load <= 0) return;
+    const pos = m.geometry.attributes.position, n = pos.count, U = m.material.uniforms;
+    const hOf = (i) => (pos.getY(i) - U.uLo.value) / (U.uHi.value - U.uLo.value);
+    // Screen centre line of the figure, for pushing read-outs outward.
+    const [cx] = toScreen(m, 0);
+    if (spawn) for (let k = 0; k < 5; k++) {
+      // Bias half the samples to the loading edge, the rest anywhere already loaded.
+      let i = -1;
+      for (let tries = 0; tries < 30 && i < 0; tries++) {
+        const j = Math.floor(rnd() * n), h = hOf(j);
+        if (h <= load && (k % 2 || load >= 1 || h > load - .12)) i = j;
+      }
+      if (i < 0) continue;
+      const [x, y] = toScreen(m, i);
+      let j = i;
+      for (let tries = 0; tries < 20; tries++) { const c = Math.floor(rnd() * n); if (hOf(c) <= load) { j = c; break; } }
+      TR.pool.push({ k: rnd() < .78 ? 'box' : 'link', m, i, j, born: t, life: .08 + rnd() * .28, dir: x >= cx ? 1 : -1, off: (14 + rnd() * 26) * u, txt: [trNum(), trNum()] });
+    }
+    // Face tracker once the head has loaded.
+    if (load > .85) {
+      const M = MATCH_BODY[name];
+      let best = null;
+      for (let i = 0; i < n; i += 7) { const y = pos.getY(i); if (Math.abs(y - M.gy - (name === 'eva' ? .07 : 0)) < .06 && (!best || Math.abs(pos.getX(i)) < Math.abs(pos.getX(best)))) best = i; }
+      if (best !== null) {
+        const [hx, hy] = toScreen(m, best), r = 16 * u, L = r * .4;
+        og.strokeStyle = '#fff';
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          og.beginPath(); og.moveTo(hx + sx * r, hy + sy * r - sy * L); og.lineTo(hx + sx * r, hy + sy * r); og.lineTo(hx + sx * r - sx * L, hy + sy * r); og.stroke();
+        }
+        const tx = fi === 0 ? hx - r - 4 * u : hx + r + 4 * u;
+        og.textAlign = fi === 0 ? 'right' : 'left'; og.fillStyle = '#fff';
+        og.fillText(`FACE_${'AB'[fi]} ${name.toUpperCase()}`, tx, hy - r + 2 * u);
+        og.fillStyle = 'rgba(255,255,255,.75)';
+        og.fillText(`LOCK ${(.9 + rnd() * .09).toFixed(3)}`, tx, hy - r + 2 * u + fs * 1.2);
+        og.fillText(`ID ${String(Math.floor(rnd() * 65536)).padStart(5, '0')}`, tx, hy - r + 2 * u + fs * 2.4);
+      }
+    }
+  });
+  TR.pool = TR.pool.filter((e) => t - e.born < e.life && t >= e.born);
+  for (const e of TR.pool) {
+    const [x, y] = toScreen(e.m, e.i);
+    og.strokeStyle = '#fff'; og.fillStyle = '#fff';
+    if (e.k === 'link') {
+      const [x2, y2] = toScreen(e.m, e.j);
+      og.globalAlpha = .7; og.beginPath(); og.moveTo(x, y); og.lineTo(x2, y2); og.stroke(); og.globalAlpha = 1;
+      continue;
+    }
+    const b = 2.6 * u, ox = x + e.dir * e.off;
+    og.strokeRect(x - b, y - b, b * 2, b * 2);
+    og.beginPath(); og.moveTo(x + e.dir * b, y); og.lineTo(ox, y); og.stroke();
+    og.textAlign = e.dir > 0 ? 'left' : 'right';
+    og.fillText(`V${String(e.i).padStart(4, '0')} ${e.txt[0]}`, ox + e.dir * 2 * u, y - fs * .55);
+    og.globalAlpha = .7; og.fillText(trNum(), ox + e.dir * 2 * u, y + fs * .6); og.globalAlpha = 1;
+  }
+  og.restore();
 }
 
 // Before the visitor enters: the empty loader (frame, readouts, corner pieces, bars at 0%) behind the
