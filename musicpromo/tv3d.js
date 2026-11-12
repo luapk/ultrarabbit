@@ -27,14 +27,18 @@ const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 /* ---------- screen: the footage plus the CCTV readout, scan lines and a rolling band ---------- */
 const SW = mobile ? 960 : 1280, SH = SW * 9 / 16, U = SW / 1280;
 const sc = document.createElement('canvas'); sc.width = SW; sc.height = SH;
+const vc = document.createElement('canvas'); vc.width = SW; vc.height = SH;
+const vg = vc.getContext('2d'); let vHas = false;
 const sg = sc.getContext('2d'), screenTex = new THREE.CanvasTexture(sc);
 screenTex.encoding = THREE.sRGBEncoding; screenTex.minFilter = THREE.LinearFilter; screenTex.generateMipmaps = false;
 const font = new FontFace('PS', 'url(/musicpromo/ps2p.woff2)');
 font.load().then((f) => document.fonts.add(f)).catch(() => {});
 const FONT = (px) => `${Math.round(px * U)}px PS, "Fira Code", monospace`;
 function drawScreen(video, ov, t) {
+  // Hold the last good frame while the video seeks, so the screen never blinks to black.
+  if (video.readyState >= 2) { vg.drawImage(video, 0, 0, SW, SH); vHas = true; }
   sg.fillStyle = '#000'; sg.fillRect(0, 0, SW, SH);
-  if (video.readyState >= 2) sg.drawImage(video, 0, 0, SW, SH);
+  if (vHas) sg.drawImage(vc, 0, 0);
   sg.strokeStyle = 'rgba(255,255,255,.8)'; sg.lineWidth = 4 * U;
   const m = 40 * U, L = 70 * U;
   for (const [x, y, dx, dy] of [[m, m, 1, 1], [SW - m, m, -1, 1], [m, SH - m, 1, -1], [SW - m, SH - m, -1, -1]]) {

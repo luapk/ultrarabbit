@@ -52,8 +52,8 @@
   /* The CCTV footage plays on a 3D red TV (tv3d.js): the video only feeds its screen, which carries
      its own readout and scan lines. Without WebGL it falls back to the flat CCTV frame. */
   #tv3d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
-  #promo.tv #tv3d { display: block; }
-  #promo.tv video { position: absolute; width: 2px; height: 2px; opacity: 0; }
+  #tv3d.on { display: block; }
+  #promo.tv video, #cine.tv video.on { position: absolute; width: 2px; height: 2px; opacity: 0; }
   #promo.tv .cctv { display: none; }
   #promo.tv::after { display: none; }
   /* Cinematic band clips, shown untouched: no grade, scan lines or CCTV frame. */
@@ -202,7 +202,7 @@
   <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
   <canvas id="bust3d" class="layer"></canvas>
   <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="bandpageVid" muted playsinline preload="auto" src="/ULTRARABBIT.mp4"></video></div>
-  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video><canvas id="tv3d"></canvas>
+  <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
       <div class="rec" id="ccRec"><i></i>REC</div>
@@ -212,6 +212,7 @@
       <div class="mid"></div>
     </div>
   </div>
+  <canvas id="tv3d" class="layer"></canvas>
   <div id="grain" class="layer"></div>
   <div id="scan" class="layer"></div>
   <div id="flash" class="layer"></div>
@@ -1575,42 +1576,9 @@ S.RUN_GOLDEN = totemScene({
   },
 });
 
-// Repetition and scale: bands each 1/phi the height of the one below, packed with rabbits that
-// travel one stride per cycle (so their feet stay planted), rows alternating direction.
-S.RUN_HERD = totemScene({
-  init({ H }) {
-    this.rows = [];
-    let y = H;
-    for (let k = 0; y > 0; k++) {
-      const h = H * .4 * (1 / PHI) ** k;
-      y -= h;
-      this.rows.push({ y, h: Math.max(h, 3), off: rand(0, 1000), dir: k % 2 ? -1 : 1, k });
-      if (h < 3) { this.rows[this.rows.length - 1].y = 0; this.rows[this.rows.length - 1].h = y + h; break; }
-    }
-    this.flash = -1;
-  },
-  onBeat() { this.flash = Math.floor(Math.random() * this.rows.length); },
-  draw(g, W, H, dt, ph) {
-    const ibi = A.bpm ? 60 / A.bpm : .5;
-    for (const r of this.rows) {
-      const inv = r.k === this.flash && ph < .5;
-      const bg = RUN_COLS[(r.k + (inv ? 1 : 0)) % 3], ink = RUN_COLS[(r.k + (inv ? 2 : 1)) % 3];
-      g.fillStyle = bg;
-      g.fillRect(0, r.y, W, r.h + 1);
-      const rh = r.h * .82, gap = RUN_W * rh * 1.08;
-      r.off += r.dir * gap / (2 * ibi) * dt;
-      const start = ((r.off % gap) + gap) % gap - gap;
-      let n = 0;
-      for (let x = start; x < W + gap; x += gap, n++) {
-        drawRun(g, runFrame((n * 3 + r.k) % 8), x, r.y + r.h / 2, rh, ink, null, r.dir < 0);
-      }
-    }
-  },
-});
-
 const MASK_SCENES = ['FACE', 'ARMY', 'TUNNEL', 'ORBIT', 'STROBE', 'EYE_DIVE'];
 const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_DIVE'];
-const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN', 'RUN_HERD'];
+const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN'];
 const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES];
 // Number keys: 1-6 mask scenes, 7 band clip, 8 steps through the totem sequences, 9 the runs.
 const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM', 'RUN'];
@@ -1743,7 +1711,7 @@ function directPlayback() {
   let scene = null;
   for (const c of take) {
     if (c.t > ct) break;
-    if (c.s === 'LOGO') { if (c.t > DR.lastT && ct - c.t < .5) fever(rand(8, 12)); } else scene = c.s;
+    if (c.s === 'LOGO') { if (c.t > DR.lastT && ct - c.t < .5) fever(rand(8, 12)); } else if (S[c.s]) scene = c.s; // skips scenes since removed
   }
   DR.lastT = ct;
   if (scene && scene !== sceneName) setScene(scene, false, true);
@@ -1851,16 +1819,34 @@ const CINE_CUES = [
   { a: 14.742, b: 18.076, file: 0, vid: 'bandpage' }, // match cut from the loader's wireframe heads to the band clip, side by side
   { a: 18.076, b: 21.284, file: 0 },    // then the pair walk in on red (cut before they look at each other)
   { a: 28.849, b: 38.974, file: 0, vid: 'ride' },   // "we're blasting off": live-action RABBIT RUSH opener (chase, front-on, into Eva's lens) with arcade HUD
-  { a: 49.5, b: 55.0, file: 5.458 },     // V1 > V2 gap: Eva headshot in red space, push into her sunglasses: a tunnel of rabbit masks in the lens
-  { a: 75.67, b: 81.19, file: 10.958 },      // V2 > V3 gap: push into Andy's glasses, the duo reflected
+  { a: 52.363, b: 55.0, file: 8.321 },   // V1 > V2 gap: Eva (B&W on red) from the moment the rabbit-mask tunnel appears in her lens
+  { a: 78.124, b: 81.19, file: 13.412 },  // V2 > V3 gap: Andy (B&W) from the moment the duo appears reflected in his glasses
   { a: 101.842, b: 107.842, file: 16.5 }, // bridge: walking toward camera on white
-  { a: 111.247, b: 113.7, file: 33.0 },   // ride selfie: Eva screams with laughter, camera whips
-  { a: 113.7, b: 116.154, file: 30.5 },   // ride selfie, straight after: Andy fist-pumps, then reaches for the lens
+  { a: 111.247, b: 113.7, file: 33.0, tv: 1 },   // ride selfie (on the TV): Eva screams with laughter, camera whips
+  { a: 113.7, b: 116.154, file: 30.5, tv: 1 },   // ride selfie (on the TV), straight after: Andy fist-pumps, then reaches for the lens
   { a: 116.154, b: 126.946, file: 10.125, vid: 'ride' }, // rest of the bridge break: the ULTRARABBIT monolith, car out of its mouth, hyperspeed ring tunnel
-  { a: 186.488, b: 188.941, file: 35.458 },   // ride selfie: Andy lunges at camera, whip pan
+  { a: 186.488, b: 188.941, file: 35.458, tv: 1 },   // ride selfie (on the TV): Andy lunges at camera, whip pan
   { a: 199.597, b: 211.722, file: 20.917, vid: 'ride' }, // instrumental after "this is our time": live-action spiral dive round the totem tower
   { a: 246.85, b: 255, file: 22.5 },   // final shot: the ULTRARABBIT monolith
 ];
+// Cues marked tv play on the 3D TV; back-to-back ones share one orbit.
+CINE_CUES.forEach((c, i) => {
+  const p = CINE_CUES[i - 1];
+  if (!c.tv) return;
+  c.run = p && p.tv && c.a - p.b < .05 ? p.run : { a: c.a, b: c.b };
+  c.run.b = c.b;
+});
+// The TV's readout for the ride selfies: its own camera, the clock running on song time.
+function rideOverlay(ct) {
+  const t = CC_START + 1800 + ct, p2 = (n) => String(Math.floor(n)).padStart(2, '0');
+  return { ts: `07/11/2026 ${p2(t / 3600 % 24)}:${p2(t / 60 % 60)}:${p2(t % 60)}:${p2((t % 1) * 25)}`, cam: 'CAM 05<br>RIDECAM · CAR 01', rec: (t % 1) <= .5 };
+}
+const tvEl = $('tv3d'), TV = { used: false, on: false };
+const tvShow = (video, k, ov) => {
+  const ok = !!(window.tvCCTV && tvCCTV.update(video, k, ov));
+  if (ok) TV.used = true;
+  return ok;
+};
 const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), bandpage: $('bandpageVid') };
 const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
 const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
@@ -1879,9 +1865,10 @@ function cineUpdate(live, ct) {
     if (!CI.on) { CI.on = true; cineEl.classList.add('on'); }
     if (Math.abs(v.currentTime - want) > .15) v.currentTime = want;
     if (v.paused) v.play().catch(() => {});
+    cineEl.classList.toggle('tv', !!cue.tv && tvShow(v, (ct - (cue.run ? cue.run.a : cue.a)) / ((cue.run ? cue.run.b : cue.b) - (cue.run ? cue.run.a : cue.a)), rideOverlay(ct)));
     return true;
   }
-  if (CI.on) { CI.on = false; cineEl.classList.remove('on'); CI.vid.pause(); }
+  if (CI.on) { CI.on = false; cineEl.classList.remove('on', 'tv'); CI.vid.pause(); }
   const next = live ? CINE_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
   if (next >= 0 && CI.primed !== next) { CI.primed = next; cueVid(CINE_CUES[next]).currentTime = CINE_CUES[next].file; }
   // Before the song starts, sit on the opening frame.
@@ -1893,7 +1880,9 @@ function cineUpdate(live, ct) {
 function footageUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
+  TV.used = false;
   const on = cineUpdate(live, ct) | promoUpdate(live, ct) | (window.burrowBusts ? burrowBusts.update(ct, (ct - TRACK_GRID[0].phase) * TRACK_GRID[0].bpm / 60, live) : false);
+  if (TV.used !== TV.on) { TV.on = TV.used; tvEl.classList.toggle('on', TV.on); }
   if (on !== FT.on) {
     FT.on = on;
     document.body.classList.toggle('footage', !!on);
@@ -1911,10 +1900,10 @@ function promoUpdate(live, ct) {
     if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
     if (promoVid.paused) promoVid.play().catch(() => {});
     const k = (ct - cue.run.a) / (cue.run.b - cue.run.a);
-    promoEl.classList.toggle('tv', !!(window.tvCCTV && tvCCTV.update(promoVid, k, CCOV)));
+    promoEl.classList.toggle('tv', tvShow(promoVid, k, CCOV));
     return true;
   }
-  if (PR.on) { PR.on = false; promoEl.classList.remove('on'); promoVid.pause(); }
+  if (PR.on) { PR.on = false; promoEl.classList.remove('on', 'tv'); promoVid.pause(); }
   // Park the footage on the next cue's first frame so the cut is instant.
   const next = live ? PROMO_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
   if (next >= 0 && PR.primed !== next) {
