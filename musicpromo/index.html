@@ -64,8 +64,6 @@
   #cine.on { display: block; }
   #cine video { width: 100%; height: 100%; object-fit: cover; display: none; }
   #cine video.on { display: block; }
-  /* The band clip is portrait: keep the heads in frame (busts.js matches the wireframes to this crop). */
-  #cine #bandpageVid { object-position: 50% 20%; }
   /* Only the footage's own fine lines while it's up, not the page-wide ones on top. */
   body.footage #scan { display: none; }
   body.footage:not(.directing) #hud { opacity: 0; }
@@ -118,11 +116,11 @@
 
   #gate {
     position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 22px; background: rgba(0,0,0,.72); cursor: pointer; text-align: center; padding: 16px;
+    justify-content: center; gap: 22px; background: transparent; cursor: pointer; text-align: center; padding: 16px;
     transition: opacity .5s;
   }
   #gate.gone { opacity: 0; pointer-events: none; }
-  #gate img { height: min(58vh, 120vw); width: auto; display: block; }
+
   #gate .go { font-size: 13px; letter-spacing: .3em; color: #000; background: #fff; padding: 12px 18px; }
   #gate .alt { font-size: 11px; letter-spacing: .2em; color: #fff; }
   #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
@@ -199,9 +197,9 @@
   <canvas id="gl"></canvas>
   <canvas id="totem" class="layer"></canvas>
   <div id="front" class="layer txt"></div>
-  <video id="band" class="layer" src="/ULTRARABBIT.mp4" muted playsinline preload="auto"></video>
+  <video id="band" class="layer" muted playsinline preload="none"></video>
   <canvas id="bust3d" class="layer"></canvas>
-  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="bandpageVid" muted playsinline preload="auto" src="/ULTRARABBIT.mp4"></video></div>
+  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -269,7 +267,6 @@
 </div>
 
 <div id="gate">
-  <img src="/logo.jpg" alt="ULTRARABBIT">
   <div class="go">[ CLICK TO ENTER ]</div>
 </div>
 
@@ -1581,7 +1578,7 @@ const TOTEM_SCENES = ['TOTEM_TRACE', 'TOTEM_ALIVE', 'TOTEM_COLUMNS', 'TOTEM_DIVE
 const RUN_SCENES = ['RUN_DOLL', 'RUN_GOLDEN'];
 const ROTATION = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES];
 // Number keys: 1-6 mask scenes, 7 band clip, 8 steps through the totem sequences, 9 the runs.
-const KEYS = [...MASK_SCENES, 'BAND', 'TOTEM', 'RUN'];
+const KEYS = [...MASK_SCENES, 'TOTEM', 'RUN'];
 // Scenes drawn on the flat 2D canvas rather than in 3D.
 const isFlat = (n) => n.startsWith('TOTEM_') || n.startsWith('RUN_');
 
@@ -1624,7 +1621,7 @@ function setScene(name, keepText = false, quiet = false) {
 /* Direct mode: tap scenes live, record a take per song, play it back  */
 /* ------------------------------------------------------------------ */
 
-const DIRECT_TILES = [...MASK_SCENES, 'BAND', ...TOTEM_SCENES, ...RUN_SCENES, 'LOGO'];
+const DIRECT_TILES = [...MASK_SCENES, ...TOTEM_SCENES, ...RUN_SCENES, 'LOGO'];
 // Recorded takes, per track: [{ t: song seconds, s: scene name or 'LOGO' }]. A take saved on this
 // device wins; BAKED_DIRECT holds takes published for everyone.
 const BAKED_DIRECT = [null, null, null];
@@ -1711,7 +1708,7 @@ function directPlayback() {
   let scene = null;
   for (const c of take) {
     if (c.t > ct) break;
-    if (c.s === 'LOGO') { if (c.t > DR.lastT && ct - c.t < .5) fever(rand(8, 12)); } else if (S[c.s]) scene = c.s; // skips scenes since removed
+    if (c.s === 'LOGO') { if (c.t > DR.lastT && ct - c.t < .5) fever(rand(8, 12)); } else if (S[c.s] && c.s !== 'BAND') scene = c.s; // skips scenes since removed
   }
   DR.lastT = ct;
   if (scene && scene !== sceneName) setScene(scene, false, true);
@@ -1816,7 +1813,6 @@ function cctvUpdate(cue, fileTime) {
 // in lyric-free stretches): song range [a, b) plays `vid` (cine.mp4 unless named)
 // from `file`.
 const CINE_CUES = [
-  { a: 14.742, b: 18.076, file: 0, vid: 'bandpage' }, // match cut from the loader's wireframe heads to the band clip, side by side
   { a: 18.076, b: 21.284, file: 0 },    // then the pair walk in on red (cut before they look at each other)
   { a: 28.849, b: 38.974, file: 0, vid: 'ride' },   // "we're blasting off": live-action RABBIT RUSH opener (chase, front-on, into Eva's lens) with arcade HUD
   { a: 52.363, b: 55.0, file: 8.321 },   // V1 > V2 gap: Eva (B&W on red) from the moment the rabbit-mask tunnel appears in her lens
@@ -1847,7 +1843,7 @@ const tvShow = (video, k, ov) => {
   if (ok) TV.used = true;
   return ok;
 };
-const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), bandpage: $('bandpageVid') };
+const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid') };
 const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
 const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
 // Show one of the cinematic videos, pausing the other.
@@ -1881,7 +1877,9 @@ function footageUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
   TV.used = false;
-  const on = cineUpdate(live, ct) | promoUpdate(live, ct) | (window.burrowBusts ? burrowBusts.update(ct, (ct - TRACK_GRID[0].phase) * TRACK_GRID[0].bpm / 60, live) : false);
+  const gateOpen = !$('gate').classList.contains('gone');
+  const on = cineUpdate(live, ct) | promoUpdate(live, ct) | logoUpdate(live, ct)
+    | (window.burrowBusts ? burrowBusts.update(ct, (ct - TRACK_GRID[0].phase) * TRACK_GRID[0].bpm / 60, live, gateOpen) : false);
   if (TV.used !== TV.on) { TV.on = TV.used; tvEl.classList.toggle('on', TV.on); }
   if (on !== FT.on) {
     FT.on = on;
@@ -1890,6 +1888,17 @@ function footageUpdate() {
   }
 }
 const FT = { on: 0 };
+
+// Once both characters have loaded, the intro cuts (bar 9) to the original glitched ULTRARABBIT logo
+// burst from DIRECT mode, held until the striding clip comes in.
+const LOGO_CUT = { a: 14.742, b: 18.076 }, LG = { on: false };
+function logoUpdate(live, ct) {
+  const on = live && ct >= LOGO_CUT.a && ct < LOGO_CUT.b && logos.length > 0;
+  if (on) { F.kind = 'logo'; if (F.cuts < 4) F.cuts = 8; }
+  else if (LG.on) { F.cuts = 0; F.frames = 0; }
+  LG.on = on;
+  return on;
+}
 
 function promoUpdate(live, ct) {
   const cue = live ? PROMO_CUES.find((c) => ct >= c.a && ct < c.b) : null;

@@ -11,14 +11,15 @@ const eOut = (p) => 1 - (1 - p) ** 3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const COLS = ['#ff2d2d', '#000000', '#ffffff'];
 
-const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where it match-cuts to the band clip
+const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where the page cuts to the glitched logo
 // Each orbit is planned over its full 10 bars (a..b) but only its second half is shown (from `on`),
 // so it opens already halfway in and keeps the same ending.
 const EVA = { a: 148.868, on: 157.046, b: 165.225 };   // bars 91-101; shown 96-101
 const ANDY = { a: 165.225, on: 173.404, b: 181.582 };  // bars 101-111, ending into the 3:02.6 "ultrarabbit"; shown 106-111
-const LOGO = { fadeIn: 2.2, glitch: 3.0, glow: 3.6 };
+// The loader starts the moment the visitor enters (the logo now comes after it, on the page's #cut layer).
+const LOGO = { fadeIn: -3, glitch: -2, glow: 0 };
 const LOADED = { eva: 11.4, andy: 12.6, module: 12.9 };
-// Match cut: the intro ends on the band clip (/ULTRARABBIT.mp4, 720x1280, shown object-fit: cover at
+// Layout maths from the old match cut to the band clip (/ULTRARABBIT.mp4, 720x1280, shown object-fit: cover at
 // object-position 50% 20%). Each head settles on its place in that clip's first frame. Anchored on the
 // sunglasses: gy is the glasses' height in the model, ty the top of the head (crown, not ears), neck
 // where the head is cut off; (vx, vy) the glasses in clip pixels, vt the crown's clip y; ry the turn.
@@ -272,7 +273,7 @@ function drawHud(t, beats) {
   const beat = Math.floor(beats), ph = beats - beat;
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
   // Fade in from the white glow.
-  const fade = clamp(1 - (t - LOGO.glow) / .5, 0, 1);
+  const fade = 0;
   const m = 22 * u;
   g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = Math.max(1, u);
   g.strokeRect(m, m, w - m * 2, h - m * 2);
@@ -297,7 +298,7 @@ function drawHud(t, beats) {
     [m + 16 * u, h - m - 70 * u - gs * .75, 1], [w - m - 16 * u - gs, h - m - 70 * u - gs * .75, -1],
   ];
   corners.forEach(([x, y, flip], i) => {
-    const mod = glyphMods[(i * 3 + bar) % glyphMods.length], on = i === beat % 4;
+    const mod = glyphMods[(((i * 3 + bar) % glyphMods.length) + glyphMods.length) % glyphMods.length], on = i === beat % 4;
     g.save(); g.translate(x + (flip < 0 ? gs : 0), y); g.scale(gs * flip, gs);
     g.lineWidth = TOT_LW;
     MODS[mod.k].draw(g, { c: on ? '#ff2d2d' : 'rgba(255,255,255,.8)', a: '#ff2d2d', t, ph, e: 0, look: Math.sin(t * 3 + i), beat, full: true });
@@ -369,7 +370,8 @@ function orbitIn(t, beats, a, b, head) {
 }
 
 let shown = false;
-function update(t, beats, live) {
+function update(t, beats, live, idle) {
+  if (idle && !live) return drawIdle();
   const which = !live ? null
     : t < INFLECT ? 'intro'
     : t >= EVA.on && t < EVA.b ? 'eva'
@@ -396,19 +398,17 @@ function update(t, beats, live) {
     if (t < LOGO.glow) drawLogo(t); else loads = drawHud(t, beats);
     introSfx(t, beats, loads);
     if (t >= LOGO.glow) {
-      // Full length, turning as they load, then easing round to face camera and pushing in until their
-      // heads sit exactly where they are in the first frame of the band clip the intro cuts to.
+      // Full length, side by side, turning as they load, then easing round to face camera and holding
+      // there under MODULE LOADED until the cut to the logo.
       evaBody.visible = andyBody.visible = true;
       for (const [name, m, dir] of [['eva', evaBody, 1], ['andy', andyBody, -1]]) {
-        const P = matchHead(name, t);
-        // As they push in, the bodies fall away below the neck, leaving just the heads for the cut.
-        const kp = eInOut(clamp((t - LOADED.module) / (SETTLE - LOADED.module), 0, 1));
-        m.material.uniforms.uLo.value = -.96 + (MATCH_BODY[name].neck + .96) * kp; m.material.uniforms.uHi.value = .95;
+        const P = matchHead(name, LOADED.module);   // home pose (no push-in)
+        m.material.uniforms.uLo.value = -.96; m.material.uniforms.uHi.value = .95;
         m.scale.setScalar(P.scale);
         m.position.set(P.x, P.y, 0);
-        // Spin that decelerates to land on the clip's pose at SETTLE and holds there.
+        // Spin that decelerates to land front-on at SETTLE and holds there.
         const x = Math.max(0, SETTLE - t), f = x > 1 ? x - .5 : x * x / 2;
-        m.rotation.y = MATCH[name].ry + dir * .9 * f;
+        m.rotation.y = dir * .9 * f;
       }
       const flick = (p) => (p > 0 && p < 1 && Math.random() < .04 ? p - .08 : p);
       evaBody.material.uniforms.uReveal.value = flick(loads[0]) * 1.02;
@@ -421,6 +421,19 @@ function update(t, beats, live) {
     eva.scale.setScalar(1); andy.scale.setScalar(1);
     for (const m of [eva, andy]) { m.material.uniforms.uLo.value = -.95; m.material.uniforms.uHi.value = .95; }
   }
+  bgTex.needsUpdate = true;
+  renderer.render(scene, cam);
+  return true;
+}
+
+// Before the visitor enters: the empty loader (frame, readouts, corner pieces, bars at 0%) behind the
+// CLICK TO ENTER button.
+function drawIdle() {
+  if (!meshes.evaBody) return false;
+  if (!shown) { shown = true; canvas.classList.add('on'); }
+  fit();
+  for (const m of Object.values(meshes)) m.visible = false;
+  drawHud(0, performance.now() / 1000 * 146.728 / 60);
   bgTex.needsUpdate = true;
   renderer.render(scene, cam);
   return true;
