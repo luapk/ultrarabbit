@@ -27,10 +27,18 @@ const MATCH = {
   andy: { gy: .54, ty: .9, neck: .2, vx: 160, vy: 245, vt: 30, ry: .1 },
   eva: { gy: .2, ty: .47, neck: -.12, vx: 562, vy: 505, vt: 300, ry: -.15 },
 };
+// The loader shows the two as full-length low-poly wireframes (andy/eva-body.glb, from the B&W duo
+// still), standing on one ground line at their real relative heights, then pushes in so their heads land
+// on the band clip exactly as before. gy / ty here are the glasses and crown in each body model.
+const MATCH_BODY = {
+  andy: { ...MATCH.andy, gy: .836, ty: .95, neck: .62 },
+  eva: { ...MATCH.eva, gy: .595, ty: .705, neck: .47 },
+};
+const BODY_H = { andy: 1, eva: 659 / 669 };   // Eva is a little shorter (her ear tips included)
 const MCAM = { fov: 30, d: 8 };
 const SETTLE = 13.9;
 function matchHead(name, t) {
-  const M = MATCH[name];
+  const M = MATCH_BODY[name];
   const s = Math.max(W / CLIP.w, H / CLIP.h), ox = (W - CLIP.w * s) * CLIP.ox, oy = (H - CLIP.h * s) * CLIP.oy;
   const sx = ox + M.vx * s, sy = oy + M.vy * s;
   const wpp = 2 * MCAM.d * Math.tan(MCAM.fov * Math.PI / 360) / H;       // world units per screen px at z = 0
@@ -38,11 +46,16 @@ function matchHead(name, t) {
   const match = { x: (sx - W / 2) * wpp, y: (H / 2 - sy) * wpp - M.gy * scale, scale };
   // While loading they sit comfortably in their own halves, the same size; once MODULE LOADED is up
   // they push in to the match pose, arriving at SETTLE.
-  const hx = (name === 'andy' ? .27 : .73) * W, hy = H * .44, hpx = Math.min(H * .15, W * .16);
-  const hs = (hpx * wpp) / (M.ty - M.gy);
-  const home = { x: (hx - W / 2) * wpp, y: (H / 2 - hy) * wpp - M.gy * hs, scale: hs };
+  // Home: full length, feet on a shared ground line, Andy left and Eva right.
+  const hx = (name === 'andy' ? .3 : .7) * W, ground = H * .8, tall = Math.min(H * .6, W * .9);
+  const hs = (tall * wpp / 1.9) * BODY_H[name];
+  const home = { x: (hx - W / 2) * wpp, y: (H / 2 - ground) * wpp + .95 * hs, scale: hs };
   const k = eInOut(clamp((t - LOADED.module) / (SETTLE - LOADED.module), 0, 1));
-  return { x: home.x + (match.x - home.x) * k, y: home.y + (match.y - home.y) * k, scale: home.scale * (match.scale / home.scale) ** k };
+  // Move the glasses (not the model's centre) in a straight line, so the face stays on screen while
+  // the scale grows: the push-in heads for the face.
+  const sc = home.scale * (match.scale / home.scale) ** k;
+  const gy = home.y + M.gy * home.scale + ((match.y + M.gy * match.scale) - (home.y + M.gy * home.scale)) * k;
+  return { x: home.x + (match.x - home.x) * k, y: gy - M.gy * sc, scale: sc };
 }
 const eInOut = (p) => p * p * (3 - 2 * p);
 
@@ -101,6 +114,8 @@ function load(name, url, cropBase) {
 }
 load('eva', '/musicpromo/eva-wire.glb', 0);
 load('andy', '/musicpromo/andy-wire.glb', .14);
+load('evaBody', '/musicpromo/eva-body.glb', 0);
+load('andyBody', '/musicpromo/andy-body.glb', 0);
 
 const logo = new Image();
 logo.src = '/logo.jpg';
@@ -219,7 +234,6 @@ const SFX = {
 /* ---------------- intro: logo, glitch, glow, HUD ---------------- */
 const GLYPHS = ['EARS', 'ARROWS', 'GOGGLES', 'EYE', 'MOUTH', 'DIAMOND', 'VENT', 'CHEVRON', 'DOME', 'VISOR'];
 const glyphMods = GLYPHS.map((k) => ({ ...newMod(k) }));
-const hudTotem = makeTotem();
 const ALIEN = 'ᚢᚱᛒᛏᛉᛗᚦᚨᛃᛇ◇◆△▽⊕⊗⌖⌬⍜⍟';
 const alienStr = (n, seed) => Array.from({ length: n }, (_, i) => ALIEN[Math.floor(Math.abs(Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453) % ALIEN.length)]).join('');
 
@@ -275,22 +289,20 @@ function drawHud(t, beats) {
   // Alien glyph text rows, re-rolling on each beat.
   g.fillStyle = 'rgba(255,255,255,.45)'; g.font = `${12 * u}px "Fira Code", ui-monospace, monospace`; g.textAlign = 'left';
   for (let i = 0; i < 3; i++) g.fillText(alienStr(w < h ? 14 : 26, beat * 7 + i), m + 14 * u, m + 34 * u + i * 15 * u);
-  // Side glyph columns built from the totem modules; one highlighted per beat.
-  const gs = 48 * u;
-  glyphMods.forEach((mod, i) => {
-    const on = i === beat % glyphMods.length;
-    for (const [x, flip] of [[m + 16 * u, 1], [w - m - 16 * u - gs, -1]]) {
-      const y = m + 86 * u + i * (gs * .74);
-      if (y + gs * .7 > h - m - 70 * u) continue;
-      g.save(); g.translate(x + (flip < 0 ? gs : 0), y); g.scale(gs * flip, gs);
-      g.lineWidth = TOT_LW;
-      MODS[mod.k].draw(g, { c: on ? '#ff2d2d' : 'rgba(255,255,255,.75)', a: '#ff2d2d', t, ph, e: 0, look: Math.sin(t * 3), beat, full: true });
-      g.restore();
-    }
+  // One techno-totem piece animating in each corner; each swaps to the next glyph every bar and
+  // they take turns lighting red on the beat.
+  const gs = 52 * u, bar = Math.floor(beats / 4);
+  const corners = [
+    [m + 16 * u, m + 88 * u, 1], [w - m - 16 * u - gs, m + 88 * u, -1],
+    [m + 16 * u, h - m - 70 * u - gs * .75, 1], [w - m - 16 * u - gs, h - m - 70 * u - gs * .75, -1],
+  ];
+  corners.forEach(([x, y, flip], i) => {
+    const mod = glyphMods[(i * 3 + bar) % glyphMods.length], on = i === beat % 4;
+    g.save(); g.translate(x + (flip < 0 ? gs : 0), y); g.scale(gs * flip, gs);
+    g.lineWidth = TOT_LW;
+    MODS[mod.k].draw(g, { c: on ? '#ff2d2d' : 'rgba(255,255,255,.8)', a: '#ff2d2d', t, ph, e: 0, look: Math.sin(t * 3 + i), beat, full: true });
+    g.restore();
   });
-  // A small totem pulsing in the centre, between the two heads.
-  const ts = (w >= h ? 90 : 70) * u, th = totemH(hudTotem) * ts;
-  if (w >= h && t < LOADED.module) drawTotem(g, hudTotem, (w - ts) / 2, Math.max(m + 80 * u, (h - th) / 2 - 30 * u), ts, { scan: ((beats % 4) / 4) });
   // Loading bars and labels under each head.
   // Eva finishes at 0:11.4, Andy at 0:12.6, leaving room for MODULE LOADED before the cut.
   const prog = (delay, end) => clamp((t - LOGO.glow - delay) / (end - LOGO.glow - delay), 0, 1);
@@ -362,12 +374,12 @@ function update(t, beats, live) {
     : t < INFLECT ? 'intro'
     : t >= EVA.on && t < EVA.b ? 'eva'
     : t >= ANDY.on && t < ANDY.b ? 'andy' : null;
-  const on = !!which && !!meshes.eva && !!meshes.andy;
+  const on = !!which && !!meshes.eva && !!meshes.andy && (which !== 'intro' || (!!meshes.evaBody && !!meshes.andyBody));
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
   if (!on) return false;
   fit();
-  const { eva, andy } = meshes;
-  eva.visible = andy.visible = false;
+  const { eva, andy, evaBody, andyBody } = meshes;
+  eva.visible = andy.visible = evaBody.visible = andyBody.visible = false;
   eva.position.set(0, 0, 0); andy.position.set(0, 0, 0);
   eva.rotation.set(0, 0, 0); andy.rotation.set(0, 0, 0);
   eva.material.uniforms.uReveal.value = andy.material.uniforms.uReveal.value = 2;
@@ -384,12 +396,14 @@ function update(t, beats, live) {
     if (t < LOGO.glow) drawLogo(t); else loads = drawHud(t, beats);
     introSfx(t, beats, loads);
     if (t >= LOGO.glow) {
-      // Heads only, same size, turning as they load, then easing round to face camera and settling
-      // exactly where the two heads are in the first frame of the band clip the intro cuts to.
-      eva.visible = andy.visible = true;
-      for (const [name, m, dir] of [['eva', eva, 1], ['andy', andy, -1]]) {
+      // Full length, turning as they load, then easing round to face camera and pushing in until their
+      // heads sit exactly where they are in the first frame of the band clip the intro cuts to.
+      evaBody.visible = andyBody.visible = true;
+      for (const [name, m, dir] of [['eva', evaBody, 1], ['andy', andyBody, -1]]) {
         const P = matchHead(name, t);
-        m.material.uniforms.uLo.value = MATCH[name].neck; m.material.uniforms.uHi.value = .95;
+        // As they push in, the bodies fall away below the neck, leaving just the heads for the cut.
+        const kp = eInOut(clamp((t - LOADED.module) / (SETTLE - LOADED.module), 0, 1));
+        m.material.uniforms.uLo.value = -.96 + (MATCH_BODY[name].neck + .96) * kp; m.material.uniforms.uHi.value = .95;
         m.scale.setScalar(P.scale);
         m.position.set(P.x, P.y, 0);
         // Spin that decelerates to land on the clip's pose at SETTLE and holds there.
@@ -397,8 +411,8 @@ function update(t, beats, live) {
         m.rotation.y = MATCH[name].ry + dir * .9 * f;
       }
       const flick = (p) => (p > 0 && p < 1 && Math.random() < .04 ? p - .08 : p);
-      eva.material.uniforms.uReveal.value = flick(loads[0]) * 1.02;
-      andy.material.uniforms.uReveal.value = flick(loads[1]) * 1.02;
+      evaBody.material.uniforms.uReveal.value = flick(loads[0]) * 1.02;
+      andyBody.material.uniforms.uReveal.value = flick(loads[1]) * 1.02;
       cam.fov = MCAM.fov; cam.updateProjectionMatrix();
       cam.position.set(0, 0, MCAM.d); cam.lookAt(0, 0, 0);
     }
