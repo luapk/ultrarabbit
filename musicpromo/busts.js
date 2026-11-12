@@ -65,6 +65,12 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const bg = document.createElement('canvas'), g = bg.getContext('2d');
 const bgTex = new THREE.CanvasTexture(bg);
+// Overlay above the 3D (MODULE LOADED), same pixel grid as the background canvas.
+const ov = document.createElement('canvas'), og = ov.getContext('2d');
+ov.className = 'layer';
+Object.assign(ov.style, { width: '100%', height: '100%', zIndex: 2, display: 'none', pointerEvents: 'none' });
+canvas.after(ov);
+const OV = { on: false };
 const scene = new THREE.Scene();
 scene.background = bgTex;
 const cam = new THREE.PerspectiveCamera(42, 1, .002, 100);
@@ -132,6 +138,7 @@ function fit() {
   // The background is drawn at up to 1280px wide; the wire samples it by screen fraction.
   const k = Math.min(1, 1280 / W);
   bg.width = Math.round(W * k); bg.height = Math.round(H * k);
+  ov.width = bg.width; ov.height = bg.height;
   cam.aspect = W / H; cam.updateProjectionMatrix();
   golden = null;
 }
@@ -320,17 +327,18 @@ function drawHud(t, beats) {
     g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, u); g.strokeRect(bx, by, bw, 8 * u);
     g.fillStyle = p >= 1 ? '#ff2d2d' : '#fff'; g.fillRect(bx + 2 * u, by + 2 * u, (bw - 4 * u) * p, 4 * u);
   }
-  // Both in: MODULE LOADED, flashing on the beat until the cut.
+  // Both in: MODULE LOADED, flashing on the beat until the cut. Drawn on the overlay canvas so it
+  // sits on top of everything, wireframes included.
+  og.clearRect(0, 0, ov.width, ov.height);
   if (t >= LOADED.module) {
     const blink = ph < .55, fs = (w >= h ? 34 : 24) * u;
-    g.font = `700 ${fs}px "Fira Code", ui-monospace, monospace`;
-    const label = 'MODULE LOADED', tw = g.measureText(label).width, px = 22 * u, bh = fs * 1.7;
+    og.font = `700 ${fs}px "Fira Code", ui-monospace, monospace`;
+    const label = 'MODULE LOADED', tw = og.measureText(label).width, px = 22 * u, bh = fs * 1.7;
     const bx = (w - tw) / 2 - px, by = h * .5 - bh / 2;
-    g.fillStyle = blink ? '#ff2d2d' : '#000'; g.fillRect(bx, by, tw + px * 2, bh);
-    g.strokeStyle = '#ff2d2d'; g.lineWidth = 2 * u; g.strokeRect(bx, by, tw + px * 2, bh);
-    g.fillStyle = blink ? '#fff' : '#ff2d2d'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(label, w / 2, h * .5 + 1);
-    g.textBaseline = 'top';
+    og.fillStyle = blink ? '#ff2d2d' : '#000'; og.fillRect(bx, by, tw + px * 2, bh);
+    og.strokeStyle = '#ff2d2d'; og.lineWidth = 2 * u; og.strokeRect(bx, by, tw + px * 2, bh);
+    og.fillStyle = blink ? '#fff' : '#ff2d2d'; og.textAlign = 'center'; og.textBaseline = 'middle';
+    og.fillText(label, w / 2, h * .5 + 1);
   }
   if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
   return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
@@ -374,10 +382,14 @@ function update(t, beats, live, idle) {
   if (idle && !live) return drawIdle();
   const which = !live ? null
     : t < INFLECT ? 'intro'
+    : t < LOGO_END ? 'logo'
     : t >= EVA.on && t < EVA.b ? 'eva'
     : t >= ANDY.on && t < ANDY.b ? 'andy' : null;
   const on = !!which && !!meshes.eva && !!meshes.andy && (which !== 'intro' || (!!meshes.evaBody && !!meshes.andyBody));
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
+  if (on !== OV.on) { OV.on = on; ov.style.display = on ? 'block' : 'none'; }
+  if (on) og.clearRect(0, 0, ov.width, ov.height);
+  if (on && which === 'logo') { fit(); for (const m of Object.values(meshes)) m.visible = false; drawCalmLogo(t, beats); bgTex.needsUpdate = true; renderer.render(scene, cam); return true; }
   if (!on) return false;
   fit();
   const { eva, andy, evaBody, andyBody } = meshes;
@@ -424,6 +436,38 @@ function update(t, beats, live, idle) {
   bgTex.needsUpdate = true;
   renderer.render(scene, cam);
   return true;
+}
+
+// After the loader: the ULTRARABBIT logo on black, gently animating (a slow push in, the goggles
+// glowing softly on the beat) until the striding clip.
+const LOGO_END = 18.076;
+let logoGlow = null, logoKey = null;
+function drawCalmLogo(t, beats) {
+  const w = bg.width, h = bg.height, k = clamp((t - INFLECT) / (LOGO_END - INFLECT), 0, 1);
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  if (!logo.complete || !logo.naturalWidth) return;
+  if (!logoGlow) {
+    // Key the JPEG's near-black background out to transparent, so nothing shows as a box on black.
+    logoKey = document.createElement('canvas'); logoKey.width = 1020; logoKey.height = Math.round(1020 * logo.naturalHeight / logo.naturalWidth);
+    const kg = logoKey.getContext('2d'); kg.drawImage(logo, 0, 0, logoKey.width, logoKey.height);
+    const im = kg.getImageData(0, 0, logoKey.width, logoKey.height), d = im.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const m = Math.max(d[i], d[i + 1], d[i + 2]), a = clamp((m - 40) / 120, 0, 1);
+      d[i + 3] = a * 255;
+    }
+    kg.putImageData(im, 0, 0);
+    // A cheap soft glow: the keyed logo drawn tiny and scaled back up.
+    logoGlow = document.createElement('canvas'); logoGlow.width = 96; logoGlow.height = Math.round(96 * logo.naturalHeight / logo.naturalWidth);
+    logoGlow.getContext('2d').drawImage(logoKey, 0, 0, logoGlow.width, logoGlow.height);
+  }
+  const s = Math.min(w / logo.naturalWidth, h / logo.naturalHeight) * .72 * (1 + .06 * eInOut(k));
+  const lw = logo.naturalWidth * s, lh = logo.naturalHeight * s, lx = (w - lw) / 2, ly = (h - lh) / 2;
+  g.globalAlpha = clamp((t - INFLECT) / .6, 0, 1);
+  g.drawImage(logoKey, lx, ly, lw, lh);
+  const ph = beats - Math.floor(beats);
+  g.globalCompositeOperation = 'lighter'; g.globalAlpha *= .22 + .28 * Math.exp(-ph * 4);
+  g.drawImage(logoGlow, lx - lw * .03, ly - lh * .03, lw * 1.06, lh * 1.06);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
 }
 
 // Before the visitor enters: the empty loader (frame, readouts, corner pieces, bars at 0%) behind the

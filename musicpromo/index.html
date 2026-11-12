@@ -1878,7 +1878,7 @@ function footageUpdate() {
   const ct = audio.currentTime;
   TV.used = false;
   const gateOpen = !$('gate').classList.contains('gone');
-  const on = cineUpdate(live, ct) | promoUpdate(live, ct) | logoUpdate(live, ct)
+  const on = cineUpdate(live, ct) | promoUpdate(live, ct)
     | (window.burrowBusts ? burrowBusts.update(ct, (ct - TRACK_GRID[0].phase) * TRACK_GRID[0].bpm / 60, live, gateOpen) : false);
   if (TV.used !== TV.on) { TV.on = TV.used; tvEl.classList.toggle('on', TV.on); }
   if (on !== FT.on) {
@@ -1889,16 +1889,7 @@ function footageUpdate() {
 }
 const FT = { on: 0 };
 
-// Once both characters have loaded, the intro cuts (bar 9) to the original glitched ULTRARABBIT logo
-// burst from DIRECT mode, held until the striding clip comes in.
-const LOGO_CUT = { a: 14.742, b: 18.076 }, LG = { on: false };
-function logoUpdate(live, ct) {
-  const on = live && ct >= LOGO_CUT.a && ct < LOGO_CUT.b && logos.length > 0;
-  if (on) { F.kind = 'logo'; if (F.cuts < 4) F.cuts = 8; }
-  else if (LG.on) { F.cuts = 0; F.frames = 0; }
-  LG.on = on;
-  return on;
-}
+
 
 function promoUpdate(live, ct) {
   const cue = live ? PROMO_CUES.find((c) => ct >= c.a && ct < c.b) : null;
