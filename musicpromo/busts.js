@@ -11,14 +11,14 @@ const eOut = (p) => 1 - (1 - p) ** 3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const COLS = ['#ff2d2d', '#000000', '#ffffff'];
 
-const INFLECT = 14.742;                     // bar 9: the intro's second phrase, where the page cuts to the glitched logo
+const INFLECT = 14.849;                     // bar 9: the intro's second phrase, where the page cuts to the glitched logo
 // Each orbit is planned over its full 10 bars (a..b) but only its second half is shown (from `on`),
 // so it opens already halfway in and keeps the same ending.
-const EVA = { a: 148.868, on: 157.046, b: 165.225 };   // bars 91-101; shown 96-101
-const ANDY = { a: 165.225, on: 173.404, b: 181.582 };  // bars 101-111, ending into the 3:02.6 "ultrarabbit"; shown 106-111
+const EVA = { a: 148.955, on: 157.132, b: 165.310 };   // bars 91-101; shown 96-101
+const ANDY = { a: 165.310, on: 173.488, b: 181.664 };  // bars 101-111, ending into the 3:02.6 "ultrarabbit"; shown 106-111
 // The loader starts the moment the visitor enters (the logo now comes after it, on the page's #cut layer).
 const LOGO = { fadeIn: -3, glitch: -2, glow: 0 };
-const LOADED = { eva: 11.4, andy: 12.6, module: 12.9 };
+const LOADED = { eva: 11.508, andy: 12.708, module: 13.008 };
 // Layout maths from the old match cut to the band clip (/ULTRARABBIT.mp4, 720x1280, shown object-fit: cover at
 // object-position 50% 20%). Each head settles on its place in that clip's first frame. Anchored on the
 // sunglasses: gy is the glasses' height in the model, ty the top of the head (crown, not ears), neck
@@ -37,7 +37,7 @@ const MATCH_BODY = {
 };
 const BODY_H = { andy: 1, eva: 659 / 669 };   // Eva is a little shorter (her ear tips included)
 const MCAM = { fov: 30, d: 8 };
-const SETTLE = 13.9;
+const SETTLE = 14.008;
 function matchHead(name, t) {
   const M = MATCH_BODY[name];
   const s = Math.max(W / CLIP.w, H / CLIP.h), ox = (W - CLIP.w * s) * CLIP.ox, oy = (H - CLIP.h * s) * CLIP.oy;
@@ -295,7 +295,7 @@ function drawHud(t, beats) {
   // Header readouts.
   g.fillStyle = '#fff'; g.font = `600 ${13 * u}px "Fira Code", ui-monospace, monospace`; g.textBaseline = 'top';
   g.textAlign = 'left'; g.fillText('ULTRARABBIT // SUBJECT LOAD', m + 14 * u, m + 12 * u);
-  g.textAlign = 'right'; g.fillText(`SYS·146.73 BPM · ${alienStr(6, beat)}`, w - m - 14 * u, m + 12 * u);
+  g.textAlign = 'right'; g.fillText(`SYS·146.75 BPM · ${alienStr(6, beat)}`, w - m - 14 * u, m + 12 * u);
   // Alien glyph text rows, re-rolling on each beat.
   g.fillStyle = 'rgba(255,255,255,.45)'; g.font = `${12 * u}px "Fira Code", ui-monospace, monospace`; g.textAlign = 'left';
   for (let i = 0; i < 3; i++) g.fillText(alienStr(w < h ? 14 : 26, beat * 7 + i), m + 14 * u, m + 34 * u + i * 15 * u);
@@ -445,9 +445,9 @@ function update(t, beats, live, idle) {
 // parts (ears, visor, goggles, word, mouth); one part arrives per beat, first as traced outline, then
 // filled, with the totems' little pop and red echo. Once whole, a red scan line sweeps slowly down it.
 // Fine CRT scan lines over everything, like the rest of the film.
-const LOGO_END = 18.076;
+const LOGO_END = 18.183;
 const LOGO_BANDS = [0, .35, .47, .6, .76, 1];          // fractions of the logo's height
-const LOGO_BEAT0 = (INFLECT - .0204) * 146.728 / 60;    // beat count at the cut-in (on the bar)
+const LOGO_BEAT0 = (INFLECT - .130) * 146.75 / 60;    // beat count at the cut-in (on the bar)
 let logoKey = null, logoEdge = null, logoRed = null;
 function prepLogo() {
   const Wk = 1020, Hk = Math.round(Wk * logo.naturalHeight / logo.naturalWidth);
@@ -520,6 +520,83 @@ function drawCalmLogo(t, beats) {
   g.fillStyle = vg; g.fillRect(0, 0, w, h);
 }
 
+// Tracker read-out over the loading wireframes (same language as the walk tracker): short-lived
+// sample boxes on real vertices, clustered at the loading edge, with tiny live numbers pushed outward;
+// thin links between vertices that flicker in and out; a face tracker per figure once its head is in.
+const TR = { pool: [], last: 0 };
+const _v = new THREE.Vector3();
+const rnd = Math.random;
+const trNum = () => [() => rnd().toFixed(4), () => Math.floor(rnd() * 65536).toString(16).toUpperCase().padStart(4, '0'),
+  () => (rnd() * 60 - 30).toFixed(1), () => String(Math.floor(rnd() * 360)).padStart(3, '0') + '°'][Math.floor(rnd() * 4)]();
+function toScreen(m, i) {
+  const p = m.geometry.attributes.position;
+  _v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(m.matrixWorld).project(cam);
+  return [(_v.x + 1) / 2 * ov.width, (1 - _v.y) / 2 * ov.height];
+}
+function trackerData(t, figs) {
+  const u = Math.min(ov.width, ov.height) / 540, fs = Math.max(6, 7 * u);
+  cam.updateMatrixWorld(); figs.forEach(([, m]) => m.updateMatrixWorld());
+  const spawn = t - TR.last > 1 / 30;
+  if (spawn) TR.last = t;
+  og.save(); og.lineWidth = 1; og.font = `${fs}px "Fira Code", ui-monospace, monospace`; og.textBaseline = 'middle';
+  figs.forEach(([name, m, load], fi) => {
+    if (load <= 0) return;
+    const pos = m.geometry.attributes.position, n = pos.count, U = m.material.uniforms;
+    const hOf = (i) => (pos.getY(i) - U.uLo.value) / (U.uHi.value - U.uLo.value);
+    // Screen centre line of the figure, for pushing read-outs outward.
+    const [cx] = toScreen(m, 0);
+    if (spawn) for (let k = 0; k < 5; k++) {
+      // Bias half the samples to the loading edge, the rest anywhere already loaded.
+      let i = -1;
+      for (let tries = 0; tries < 30 && i < 0; tries++) {
+        const j = Math.floor(rnd() * n), h = hOf(j);
+        if (h <= load && (k % 2 || load >= 1 || h > load - .12)) i = j;
+      }
+      if (i < 0) continue;
+      const [x, y] = toScreen(m, i);
+      let j = i;
+      for (let tries = 0; tries < 20; tries++) { const c = Math.floor(rnd() * n); if (hOf(c) <= load) { j = c; break; } }
+      TR.pool.push({ k: rnd() < .78 ? 'box' : 'link', m, i, j, born: t, life: .08 + rnd() * .28, dir: x >= cx ? 1 : -1, off: (14 + rnd() * 26) * u, txt: [trNum(), trNum()] });
+    }
+    // Face tracker once the head has loaded.
+    if (load > .85) {
+      const M = MATCH_BODY[name];
+      let best = null;
+      for (let i = 0; i < n; i += 7) { const y = pos.getY(i); if (Math.abs(y - M.gy - (name === 'eva' ? .07 : 0)) < .06 && (!best || Math.abs(pos.getX(i)) < Math.abs(pos.getX(best)))) best = i; }
+      if (best !== null) {
+        const [hx, hy] = toScreen(m, best), r = 16 * u, L = r * .4;
+        og.strokeStyle = '#fff';
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          og.beginPath(); og.moveTo(hx + sx * r, hy + sy * r - sy * L); og.lineTo(hx + sx * r, hy + sy * r); og.lineTo(hx + sx * r - sx * L, hy + sy * r); og.stroke();
+        }
+        const tx = fi === 0 ? hx - r - 4 * u : hx + r + 4 * u;
+        og.textAlign = fi === 0 ? 'right' : 'left'; og.fillStyle = '#fff';
+        og.fillText(`FACE_${'AB'[fi]} ${name.toUpperCase()}`, tx, hy - r + 2 * u);
+        og.fillStyle = 'rgba(255,255,255,.75)';
+        og.fillText(`LOCK ${(.9 + rnd() * .09).toFixed(3)}`, tx, hy - r + 2 * u + fs * 1.2);
+        og.fillText(`ID ${String(Math.floor(rnd() * 65536)).padStart(5, '0')}`, tx, hy - r + 2 * u + fs * 2.4);
+      }
+    }
+  });
+  TR.pool = TR.pool.filter((e) => t - e.born < e.life && t >= e.born);
+  for (const e of TR.pool) {
+    const [x, y] = toScreen(e.m, e.i);
+    og.strokeStyle = '#fff'; og.fillStyle = '#fff';
+    if (e.k === 'link') {
+      const [x2, y2] = toScreen(e.m, e.j);
+      og.globalAlpha = .7; og.beginPath(); og.moveTo(x, y); og.lineTo(x2, y2); og.stroke(); og.globalAlpha = 1;
+      continue;
+    }
+    const b = 2.6 * u, ox = x + e.dir * e.off;
+    og.strokeRect(x - b, y - b, b * 2, b * 2);
+    og.beginPath(); og.moveTo(x + e.dir * b, y); og.lineTo(ox, y); og.stroke();
+    og.textAlign = e.dir > 0 ? 'left' : 'right';
+    og.fillText(`V${String(e.i).padStart(4, '0')} ${e.txt[0]}`, ox + e.dir * 2 * u, y - fs * .55);
+    og.globalAlpha = .7; og.fillText(trNum(), ox + e.dir * 2 * u, y + fs * .6); og.globalAlpha = 1;
+  }
+  og.restore();
+}
+
 // Before the visitor enters: the empty loader (frame, readouts, corner pieces, bars at 0%) behind the
 // CLICK TO ENTER button.
 function drawIdle() {
@@ -527,7 +604,7 @@ function drawIdle() {
   if (!shown) { shown = true; canvas.classList.add('on'); }
   fit();
   for (const m of Object.values(meshes)) m.visible = false;
-  drawHud(0, performance.now() / 1000 * 146.728 / 60);
+  drawHud(0, performance.now() / 1000 * 146.75 / 60);
   bgTex.needsUpdate = true;
   renderer.render(scene, cam);
   return true;
