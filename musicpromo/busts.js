@@ -62,7 +62,9 @@ const eInOut = (p) => p * p * (3 - 2 * p);
 
 const canvas = document.getElementById('bust3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Rendered at twice the screen's pixel density (capped) and scaled down by the browser: WebGL lines can't
+// be thinner than one pixel, so this halves the wireframe's on-screen line width.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio * 2, 3));
 const bg = document.createElement('canvas'), g = bg.getContext('2d');
 const bgTex = new THREE.CanvasTexture(bg);
 // Overlay above the 3D (MODULE LOADED), same pixel grid as the background canvas.
@@ -469,6 +471,17 @@ function drawCalmLogo(t, beats) {
   g.globalCompositeOperation = 'lighter'; g.globalAlpha *= .22 + .28 * Math.exp(-ph * 4);
   g.drawImage(logoGlow, lx - lw * .03, ly - lh * .03, lw * 1.06, lh * 1.06);
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+  // Arcade-screen treatment: fine scan lines, a slow rolling bright band, a little flicker and a
+  // curved-glass vignette.
+  const tt = t - INFLECT, sl = Math.max(2, Math.round(h / 270));
+  g.fillStyle = `rgba(0,0,0,${.42 + Math.sin(tt * 53) * .03})`;
+  for (let y = 0; y < h; y += sl * 2) g.fillRect(0, y, w, sl);
+  const by = ((tt * .45) % 1.3 - .15) * h, band = g.createLinearGradient(0, by - h * .08, 0, by + h * .08);
+  band.addColorStop(0, 'rgba(255,255,255,0)'); band.addColorStop(.5, 'rgba(255,255,255,.06)'); band.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = band; g.fillRect(0, by - h * .08, w, h * .16);
+  const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .35, w / 2, h / 2, Math.hypot(w, h) * .6);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.75)');
+  g.fillStyle = vg; g.fillRect(0, 0, w, h);
 }
 
 // Tracker read-out over the loading wireframes (same language as the walk tracker): short-lived

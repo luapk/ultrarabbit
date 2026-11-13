@@ -980,8 +980,12 @@ const F = { cuts: 0, frames: 0, v: 0, z: 1, solid: false, kind: 'logo', totem: n
   img.src = '/logo.jpg';
 })();
 
-function fever(n) {
+// Glitched-logo burst. In the film (track mode) there are no logo cards any more: the only logo card is
+// the calm one after the loader (busts.js), plus logos built into scenes. Only a hand-fired LOGO tile
+// in DIRECT still triggers one (force).
+function fever(n, force = false) {
   if (FT.on) return;
+  if (mode === 'track' && !force) return;
   if (!logos.length) { flash = 1; return; }
   F.kind = 'logo';
   F.cuts = Math.max(F.cuts, Math.round(n));
@@ -1664,7 +1668,7 @@ function buildGrid() {
 }
 
 function directCue(name) {
-  if (name === 'LOGO') fever(rand(8, 12)); else setScene(name, false, true);
+  if (name === 'LOGO') fever(rand(8, 12), true); else setScene(name, false, true);
   if (DR.rec) DR.rec.push({ t: Math.round(audio.currentTime * 1000) / 1000, s: name });
 }
 
