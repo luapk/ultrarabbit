@@ -441,124 +441,83 @@ function update(t, beats, live, idle) {
   return true;
 }
 
-// After the loader: the ULTRARABBIT logo on black, gently animating (a slow push in, the goggles
-// glowing softly on the beat) until the striding clip.
+// After the loader: the ULTRARABBIT logo on black, built in the techno-totem way. It is cut into five
+// parts (ears, visor, goggles, word, mouth); one part arrives per beat, first as traced outline, then
+// filled, with the totems' little pop and red echo. Once whole, a red scan line sweeps slowly down it.
+// Fine CRT scan lines over everything, like the rest of the film.
 const LOGO_END = 18.076;
-let logoGlow = null, logoKey = null;
+const LOGO_BANDS = [0, .35, .47, .6, .76, 1];          // fractions of the logo's height
+const LOGO_BEAT0 = (INFLECT - .0204) * 146.728 / 60;    // beat count at the cut-in (on the bar)
+let logoKey = null, logoEdge = null, logoRed = null;
+function prepLogo() {
+  const Wk = 1020, Hk = Math.round(Wk * logo.naturalHeight / logo.naturalWidth);
+  const mk = () => { const c = document.createElement('canvas'); c.width = Wk; c.height = Hk; return c; };
+  logoKey = mk(); logoEdge = mk(); logoRed = mk();
+  const kg = logoKey.getContext('2d'); kg.drawImage(logo, 0, 0, Wk, Hk);
+  const im = kg.getImageData(0, 0, Wk, Hk), d = im.data, al = new Float32Array(Wk * Hk);
+  // Key the JPEG's near-black background out to transparent.
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const a = clamp((Math.max(d[i], d[i + 1], d[i + 2]) - 40) / 120, 0, 1);
+    d[i + 3] = a * 255; al[p] = a;
+  }
+  kg.putImageData(im, 0, 0);
+  // Outline: where the shape's alpha changes (a 2-px edge), drawn in white.
+  const eg = logoEdge.getContext('2d'), em = eg.createImageData(Wk, Hk), e = em.data;
+  for (let y = 2; y < Hk - 2; y++) for (let x = 2; x < Wk - 2; x++) {
+    const p = y * Wk + x, v = al[p];
+    const m = Math.min(al[p - 2], al[p + 2], al[p - 2 * Wk], al[p + 2 * Wk]);
+    const M = Math.max(al[p - 2], al[p + 2], al[p - 2 * Wk], al[p + 2 * Wk]);
+    const edge = clamp((M - m) * 1.6, 0, 1) * (v > .1 || M > .5 ? 1 : 0);
+    const q = p * 4; e[q] = e[q + 1] = e[q + 2] = 255; e[q + 3] = edge * 255;
+  }
+  eg.putImageData(em, 0, 0);
+  // A red copy, for the echo and the scan sweep.
+  const rg = logoRed.getContext('2d'); rg.drawImage(logoKey, 0, 0);
+  rg.globalCompositeOperation = 'source-in'; rg.fillStyle = '#ff2d2d'; rg.fillRect(0, 0, Wk, Hk);
+}
 function drawCalmLogo(t, beats) {
-  const w = bg.width, h = bg.height, k = clamp((t - INFLECT) / (LOGO_END - INFLECT), 0, 1);
+  const w = bg.width, h = bg.height;
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
   if (!logo.complete || !logo.naturalWidth) return;
-  if (!logoGlow) {
-    // Key the JPEG's near-black background out to transparent, so nothing shows as a box on black.
-    logoKey = document.createElement('canvas'); logoKey.width = 1020; logoKey.height = Math.round(1020 * logo.naturalHeight / logo.naturalWidth);
-    const kg = logoKey.getContext('2d'); kg.drawImage(logo, 0, 0, logoKey.width, logoKey.height);
-    const im = kg.getImageData(0, 0, logoKey.width, logoKey.height), d = im.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const m = Math.max(d[i], d[i + 1], d[i + 2]), a = clamp((m - 40) / 120, 0, 1);
-      d[i + 3] = a * 255;
+  if (!logoKey) prepLogo();
+  const Wk = logoKey.width, Hk = logoKey.height;
+  const s = Math.min(w / Wk, h / Hk) * .74, lw = Wk * s, lh = Hk * s, lx = (w - lw) / 2, ly = (h - lh) / 2;
+  const k = beats - LOGO_BEAT0;                                  // beats since the cut-in
+  const nb = LOGO_BANDS.length - 1;
+  for (let i = 0; i < nb; i++) {
+    const p = k - i;                                             // this part arrives on beat i
+    if (p < 0) break;
+    const y0 = LOGO_BANDS[i] * Hk, y1 = LOGO_BANDS[i + 1] * Hk, bh = y1 - y0;
+    const pop = Math.exp(-p * 7), z = 1 + pop * .14;            // the totems' pop on arrival
+    const cy = ly + (y0 + bh / 2) * s;
+    const blit = (img, ox = 0, reveal = 1) => {
+      const rh = bh * reveal;
+      g.drawImage(img, 0, y0, Wk, rh, w / 2 - lw * z / 2 + ox, cy - bh * s * z / 2, lw * z, rh * s * z);
+    };
+    if (p < .3) {
+      // Tracing on: the outline draws down through the part.
+      blit(logoEdge, 0, Math.min(1, p / .3 + .15));
+    } else {
+      if (p < .8) { g.globalAlpha = Math.min(1, (.8 - p) * 3); blit(logoRed, lw * .035 * pop * 4); g.globalAlpha = 1; }
+      blit(logoKey);
+      if (p < .6) { g.globalAlpha = (.6 - p) / .3 * .6; blit(logoEdge); g.globalAlpha = 1; }
     }
-    kg.putImageData(im, 0, 0);
-    // A cheap soft glow: the keyed logo drawn tiny and scaled back up.
-    logoGlow = document.createElement('canvas'); logoGlow.width = 96; logoGlow.height = Math.round(96 * logo.naturalHeight / logo.naturalWidth);
-    logoGlow.getContext('2d').drawImage(logoKey, 0, 0, logoGlow.width, logoGlow.height);
   }
-  const s = Math.min(w / logo.naturalWidth, h / logo.naturalHeight) * .72 * (1 + .06 * eInOut(k));
-  const lw = logo.naturalWidth * s, lh = logo.naturalHeight * s, lx = (w - lw) / 2, ly = (h - lh) / 2;
-  g.globalAlpha = clamp((t - INFLECT) / .6, 0, 1);
-  g.drawImage(logoKey, lx, ly, lw, lh);
-  const ph = beats - Math.floor(beats);
-  g.globalCompositeOperation = 'lighter'; g.globalAlpha *= .22 + .28 * Math.exp(-ph * 4);
-  g.drawImage(logoGlow, lx - lw * .03, ly - lh * .03, lw * 1.06, lh * 1.06);
-  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
-  // Arcade-screen treatment: fine scan lines, a slow rolling bright band, a little flicker and a
-  // curved-glass vignette.
-  const tt = t - INFLECT, sl = Math.max(2, Math.round(h / 270));
-  g.fillStyle = `rgba(0,0,0,${.42 + Math.sin(tt * 53) * .03})`;
-  for (let y = 0; y < h; y += sl * 2) g.fillRect(0, y, w, sl);
-  const by = ((tt * .45) % 1.3 - .15) * h, band = g.createLinearGradient(0, by - h * .08, 0, by + h * .08);
-  band.addColorStop(0, 'rgba(255,255,255,0)'); band.addColorStop(.5, 'rgba(255,255,255,.06)'); band.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = band; g.fillRect(0, by - h * .08, w, h * .16);
+  // Once whole: a red scan line sweeps down the logo, one pass every two bars.
+  if (k >= nb + .5) {
+    const sp = ((k - nb - .5) / 8) % 1, sy = sp * Hk, band = Hk * .045;
+    const y0 = Math.max(0, sy - band), y1 = Math.min(Hk, sy + band);
+    if (y1 > y0) g.drawImage(logoRed, 0, y0, Wk, y1 - y0, lx, ly + y0 * s, lw, (y1 - y0) * s);
+  }
+  // Fine CRT scan lines (one pixel every three), a faint rolling band and a curved-glass vignette.
+  g.fillStyle = 'rgba(0,0,0,.38)';
+  for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+  const tt = t - INFLECT, by = ((tt * .45) % 1.3 - .15) * h, rb = g.createLinearGradient(0, by - h * .08, 0, by + h * .08);
+  rb.addColorStop(0, 'rgba(255,255,255,0)'); rb.addColorStop(.5, 'rgba(255,255,255,.04)'); rb.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rb; g.fillRect(0, by - h * .08, w, h * .16);
   const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .35, w / 2, h / 2, Math.hypot(w, h) * .6);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.75)');
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.7)');
   g.fillStyle = vg; g.fillRect(0, 0, w, h);
-}
-
-// Tracker read-out over the loading wireframes (same language as the walk tracker): short-lived
-// sample boxes on real vertices, clustered at the loading edge, with tiny live numbers pushed outward;
-// thin links between vertices that flicker in and out; a face tracker per figure once its head is in.
-const TR = { pool: [], last: 0 };
-const _v = new THREE.Vector3();
-const rnd = Math.random;
-const trNum = () => [() => rnd().toFixed(4), () => Math.floor(rnd() * 65536).toString(16).toUpperCase().padStart(4, '0'),
-  () => (rnd() * 60 - 30).toFixed(1), () => String(Math.floor(rnd() * 360)).padStart(3, '0') + '°'][Math.floor(rnd() * 4)]();
-function toScreen(m, i) {
-  const p = m.geometry.attributes.position;
-  _v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(m.matrixWorld).project(cam);
-  return [(_v.x + 1) / 2 * ov.width, (1 - _v.y) / 2 * ov.height];
-}
-function trackerData(t, figs) {
-  const u = Math.min(ov.width, ov.height) / 540, fs = Math.max(6, 7 * u);
-  cam.updateMatrixWorld(); figs.forEach(([, m]) => m.updateMatrixWorld());
-  const spawn = t - TR.last > 1 / 30;
-  if (spawn) TR.last = t;
-  og.save(); og.lineWidth = 1; og.font = `${fs}px "Fira Code", ui-monospace, monospace`; og.textBaseline = 'middle';
-  figs.forEach(([name, m, load], fi) => {
-    if (load <= 0) return;
-    const pos = m.geometry.attributes.position, n = pos.count, U = m.material.uniforms;
-    const hOf = (i) => (pos.getY(i) - U.uLo.value) / (U.uHi.value - U.uLo.value);
-    // Screen centre line of the figure, for pushing read-outs outward.
-    const [cx] = toScreen(m, 0);
-    if (spawn) for (let k = 0; k < 5; k++) {
-      // Bias half the samples to the loading edge, the rest anywhere already loaded.
-      let i = -1;
-      for (let tries = 0; tries < 30 && i < 0; tries++) {
-        const j = Math.floor(rnd() * n), h = hOf(j);
-        if (h <= load && (k % 2 || load >= 1 || h > load - .12)) i = j;
-      }
-      if (i < 0) continue;
-      const [x, y] = toScreen(m, i);
-      let j = i;
-      for (let tries = 0; tries < 20; tries++) { const c = Math.floor(rnd() * n); if (hOf(c) <= load) { j = c; break; } }
-      TR.pool.push({ k: rnd() < .78 ? 'box' : 'link', m, i, j, born: t, life: .08 + rnd() * .28, dir: x >= cx ? 1 : -1, off: (14 + rnd() * 26) * u, txt: [trNum(), trNum()] });
-    }
-    // Face tracker once the head has loaded.
-    if (load > .85) {
-      const M = MATCH_BODY[name];
-      let best = null;
-      for (let i = 0; i < n; i += 7) { const y = pos.getY(i); if (Math.abs(y - M.gy - (name === 'eva' ? .07 : 0)) < .06 && (!best || Math.abs(pos.getX(i)) < Math.abs(pos.getX(best)))) best = i; }
-      if (best !== null) {
-        const [hx, hy] = toScreen(m, best), r = 16 * u, L = r * .4;
-        og.strokeStyle = '#fff';
-        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          og.beginPath(); og.moveTo(hx + sx * r, hy + sy * r - sy * L); og.lineTo(hx + sx * r, hy + sy * r); og.lineTo(hx + sx * r - sx * L, hy + sy * r); og.stroke();
-        }
-        const tx = fi === 0 ? hx - r - 4 * u : hx + r + 4 * u;
-        og.textAlign = fi === 0 ? 'right' : 'left'; og.fillStyle = '#fff';
-        og.fillText(`FACE_${'AB'[fi]} ${name.toUpperCase()}`, tx, hy - r + 2 * u);
-        og.fillStyle = 'rgba(255,255,255,.75)';
-        og.fillText(`LOCK ${(.9 + rnd() * .09).toFixed(3)}`, tx, hy - r + 2 * u + fs * 1.2);
-        og.fillText(`ID ${String(Math.floor(rnd() * 65536)).padStart(5, '0')}`, tx, hy - r + 2 * u + fs * 2.4);
-      }
-    }
-  });
-  TR.pool = TR.pool.filter((e) => t - e.born < e.life && t >= e.born);
-  for (const e of TR.pool) {
-    const [x, y] = toScreen(e.m, e.i);
-    og.strokeStyle = '#fff'; og.fillStyle = '#fff';
-    if (e.k === 'link') {
-      const [x2, y2] = toScreen(e.m, e.j);
-      og.globalAlpha = .7; og.beginPath(); og.moveTo(x, y); og.lineTo(x2, y2); og.stroke(); og.globalAlpha = 1;
-      continue;
-    }
-    const b = 2.6 * u, ox = x + e.dir * e.off;
-    og.strokeRect(x - b, y - b, b * 2, b * 2);
-    og.beginPath(); og.moveTo(x + e.dir * b, y); og.lineTo(ox, y); og.stroke();
-    og.textAlign = e.dir > 0 ? 'left' : 'right';
-    og.fillText(`V${String(e.i).padStart(4, '0')} ${e.txt[0]}`, ox + e.dir * 2 * u, y - fs * .55);
-    og.globalAlpha = .7; og.fillText(trNum(), ox + e.dir * 2 * u, y + fs * .6); og.globalAlpha = 1;
-  }
-  og.restore();
 }
 
 // Before the visitor enters: the empty loader (frame, readouts, corner pieces, bars at 0%) behind the
