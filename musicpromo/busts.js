@@ -384,7 +384,7 @@ function update(t, beats, live, idle) {
     : t < INFLECT ? 'intro'
     : t < LOGO_END ? 'logo'
     : t >= EVA.on && t < EVA.b ? 'eva'
-    : t >= ANDY.on && t < ANDY.b ? 'andy' : null;
+    : null;   // Andy's chant scene (ANDY) is replaced by the white-world ride (snow.mp4 on the page)
   const on = !!which && !!meshes.eva && !!meshes.andy && (which !== 'intro' || (!!meshes.evaBody && !!meshes.andyBody));
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
   if (on !== OV.on) { OV.on = on; ov.style.display = on ? 'block' : 'none'; }
