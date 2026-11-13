@@ -1854,20 +1854,39 @@ function cineShow(v) {
   CI.vid = v; v.classList.add('on');
 }
 
+// Keep a playing video in step with the song without fighting the decoder: small drift is absorbed by
+// nudging the playback rate; only a big jump (a seek, a cut, a stall) gets a hard seek. Seeking on every
+// small lag made heavy 1080p footage stutter on slower devices.
+function syncVid(v, want, fresh) {
+  const d = want - v.currentTime;
+  if (fresh || Math.abs(d) > .5) { v.currentTime = want; v.playbackRate = 1; }
+  else v.playbackRate = Math.abs(d) < .04 ? 1 : 1 + Math.max(-.12, Math.min(.12, d * .8));
+}
+// Park the next cue's video on its first frame, so the cut to it is instant. Runs while another cue is
+// still playing too, as long as the next cue uses a different video element.
+function primeNext(live, ct, playing) {
+  const next = live ? CINE_CUES.findIndex((c) => c.a > ct && c.a - ct < 2.5) : -1;
+  if (next < 0 || CI.primed === next) return;
+  const v = cueVid(CINE_CUES[next]);
+  if (v === playing) return;
+  CI.primed = next; v.currentTime = CINE_CUES[next].file;
+}
+
 function cineUpdate(live, ct) {
   const cue = live ? CINE_CUES.find((c) => ct >= c.a && ct < c.b) : null;
   if (cue) {
     const want = cue.file + ct - cue.a, v = cueVid(cue);
+    const fresh = CI.vid !== v || !CI.on;
     cineShow(v);
     if (!CI.on) { CI.on = true; cineEl.classList.add('on'); }
-    if (Math.abs(v.currentTime - want) > .15) v.currentTime = want;
+    syncVid(v, want, fresh && Math.abs(v.currentTime - want) > .08);
     if (v.paused) v.play().catch(() => {});
+    primeNext(live, ct, v);
     cineEl.classList.toggle('tv', !!cue.tv && tvShow(v, (ct - (cue.run ? cue.run.a : cue.a)) / ((cue.run ? cue.run.b : cue.b) - (cue.run ? cue.run.a : cue.a)), rideOverlay(ct)));
     return true;
   }
-  if (CI.on) { CI.on = false; cineEl.classList.remove('on', 'tv'); CI.vid.pause(); }
-  const next = live ? CINE_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
-  if (next >= 0 && CI.primed !== next) { CI.primed = next; cueVid(CINE_CUES[next]).currentTime = CINE_CUES[next].file; }
+  if (CI.on) { CI.on = false; cineEl.classList.remove('on', 'tv'); CI.vid.pause(); CI.vid.playbackRate = 1; }
+  primeNext(live, ct, null);
   // Before the song starts, sit on the opening frame.
   if (!live && CI.primed !== 0 && audio.currentTime < 1) { CI.primed = 0; cineShow(CINE_VIDS.cine); CINE_VIDS.cine.currentTime = 0; }
   return false;
@@ -1898,13 +1917,14 @@ function promoUpdate(live, ct) {
     const want = ct + cue.off - PROMO_OFFSET;
     if (!PR.on) { PR.on = true; promoEl.classList.add('on'); }
     cctvUpdate(cue, want);
-    if (Math.abs(promoVid.currentTime - want) > .15) promoVid.currentTime = want;
+    syncVid(promoVid, want, !PR.wasOn && Math.abs(promoVid.currentTime - want) > .08); PR.wasOn = true;
     if (promoVid.paused) promoVid.play().catch(() => {});
     const k = (ct - cue.run.a) / (cue.run.b - cue.run.a);
     promoEl.classList.toggle('tv', tvShow(promoVid, k, CCOV));
     return true;
   }
-  if (PR.on) { PR.on = false; promoEl.classList.remove('on', 'tv'); promoVid.pause(); }
+  if (PR.on) { PR.on = false; promoEl.classList.remove('on', 'tv'); promoVid.pause(); promoVid.playbackRate = 1; }
+  PR.wasOn = false;
   // Park the footage on the next cue's first frame so the cut is instant.
   const next = live ? PROMO_CUES.findIndex((c) => c.a > ct && c.a - ct < 2) : -1;
   if (next >= 0 && PR.primed !== next) {
