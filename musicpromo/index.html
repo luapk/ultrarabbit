@@ -199,7 +199,7 @@
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" muted playsinline preload="none"></video>
   <canvas id="bust3d" class="layer"></canvas>
-  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="snowVid" muted playsinline preload="auto" src="/musicpromo/snow.mp4"></video></div>
+  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="snowVid" muted playsinline preload="auto" src="/musicpromo/snow.mp4"></video><video id="shrineVid" muted playsinline preload="auto" src="/musicpromo/shrine.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -1824,7 +1824,7 @@ const CINE_CUES = [
   { a: 165.225, b: 181.582, file: 0, vid: 'snow' }, // replaces Andy's wireframe: white world, one drop down the giant mask, arcade HUD (stage 4)
   { a: 186.488, b: 188.941, file: 43.083, tv: 1 },   // ride selfie (on the TV): Andy lunges at camera, whip pan
   { a: 199.597, b: 211.722, file: 20.917, vid: 'ride' }, // instrumental after "this is our time": live-action spiral dive round the totem tower
-  { a: 246.85, b: 255, file: 30.125 },   // final shot: the ULTRARABBIT monolith
+  { a: 238.421, b: 255, file: 0, vid: 'shrine' },   // the end of the game: out of the car, up the neon stairs to the ULTRARABBIT shrine (final arcade stage, GAME CLEAR)
 ];
 // Cues marked tv play on the 3D TV; back-to-back ones share one orbit.
 CINE_CUES.forEach((c, i) => {
@@ -1844,7 +1844,7 @@ const tvShow = (video, k, ov) => {
   if (ok) TV.used = true;
   return ok;
 };
-const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), snow: $('snowVid') };
+const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), snow: $('snowVid'), shrine: $('shrineVid') };
 const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
 const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
 // Show one of the cinematic videos, pausing the other.
