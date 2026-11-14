@@ -332,6 +332,17 @@ function drawHud(t, beats) {
   // Both in: MODULE LOADED, flashing on the beat until the cut. Drawn on the overlay canvas so it
   // sits on top of everything, wireframes included.
   og.clearRect(0, 0, ov.width, ov.height);
+  // Until then, one big load counter over the wireframes in the arcade headline type.
+  if (t < LOADED.module) {
+    const pc = Math.round((pe + pa) / 2 * 100), pop = ph < .12 ? 1.04 : 1;
+    const c = chunky(`${pc}%`, (w >= h ? 120 : 96) * u, Math.max(3, 4.6 * u));
+    if (c) {
+      og.save(); og.imageSmoothingEnabled = false;
+      const cw = c.width * c.px * pop, chh = c.height * c.px * pop;
+      og.drawImage(c, (w - cw) / 2, h * .5 - chh / 2, cw, chh);
+      og.restore();
+    }
+  }
   if (t >= LOADED.module) {
     const blink = ph < .55, fs = (w >= h ? 34 : 24) * u;
     og.font = `700 ${fs}px "Fira Code", ui-monospace, monospace`;
@@ -344,6 +355,38 @@ function drawHud(t, beats) {
   }
   if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
   return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
+}
+
+/* ---------------- arcade headline type ("Blood"): heavy, tilted, hard pixels, solid block ---------------- */
+// Same look as the arcade HUD headlines: Dela Gothic drawn at low resolution, tilted, extruded into a
+// black block with a white keyline, red face, snapped to the palette and blown up with hard pixels.
+const DELA = new FontFace('DelaL', 'url(/musicpromo/dela_lat.woff2)');
+DELA.load().then((f) => document.fonts.add(f)).catch(() => {});
+const CHUNK = {}, CPAL = [[255, 255, 255], [255, 26, 46], [0, 0, 0]];
+function chunky(text, size, px) {
+  if (DELA.status !== 'loaded') return null;
+  const key = `${text}|${Math.round(size)}|${Math.round(px * 10)}`; if (CHUNK[key]) return CHUNK[key];
+  const s = size / px, depth = 6, tilt = .2, lw = 1.2, pad = Math.ceil(s * .6) + depth * 2;
+  const c = document.createElement('canvas'); let x = c.getContext('2d');
+  x.font = `${s}px DelaL`; const tw = x.measureText(text).width;
+  c.width = Math.ceil(tw + pad * 2 + s * .4); c.height = Math.ceil(s * 1.5 + pad * 2);
+  x = c.getContext('2d'); x.font = `${s}px DelaL`; x.textBaseline = 'middle'; x.lineJoin = 'miter';
+  const y0 = c.height / 2, x0 = pad;
+  x.setTransform(1, 0, -tilt, 1, tilt * y0, 0);
+  for (let d = depth; d >= 1; d--) { x.fillStyle = x.strokeStyle = '#000'; x.lineWidth = lw * 2; x.strokeText(text, x0 + d, y0 + d); x.fillText(text, x0 + d, y0 + d); }
+  x.save(); x.globalCompositeOperation = 'destination-over'; x.strokeStyle = '#fff'; x.lineWidth = lw * 3.2;
+  for (let d = depth; d >= 0; d--) x.strokeText(text, x0 + d, y0 + d); x.restore();
+  x.fillStyle = '#ff1a2e'; x.fillText(text, x0, y0);
+  const im = x.getImageData(0, 0, c.width, c.height), D = im.data;
+  for (let i = 0; i < D.length; i += 4) {
+    if (D[i + 3] < 110) { D[i + 3] = 0; continue; }
+    const a = D[i + 3] / 255; let best = 0, bd = 1e9;
+    for (let k = 0; k < 3; k++) { const p = CPAL[k], e = (D[i] / a - p[0]) ** 2 + (D[i + 1] / a - p[1]) ** 2 + (D[i + 2] / a - p[2]) ** 2; if (e < bd) { bd = e; best = k; } }
+    D[i] = CPAL[best][0]; D[i + 1] = CPAL[best][1]; D[i + 2] = CPAL[best][2]; D[i + 3] = 255;
+  }
+  x.setTransform(1, 0, 0, 1, 0, 0); x.putImageData(im, 0, 0);
+  c.px = px;
+  return (CHUNK[key] = c);
 }
 
 /* ---------------- intro sound cues: fire when the playhead crosses them (not on seeks) ---------------- */
@@ -475,37 +518,101 @@ function prepLogo() {
   const rg = logoRed.getContext('2d'); rg.drawImage(logoKey, 0, 0);
   rg.globalCompositeOperation = 'source-in'; rg.fillStyle = '#ff2d2d'; rg.fillRect(0, 0, Wk, Hk);
 }
+// Warp drive behind the logo: a field of tiny stars drifting towards us, then on the lock the drive
+// kicks in and they stretch into streaks rushing past. Positions are a pure function of time, so
+// seeking lands on the right frame.
+const STARS = Array.from({ length: 520 }, (_, i) => {
+  const r = (n) => { const x = Math.sin(i * 127.1 + n * 311.7) * 43758.5453; return x - Math.floor(x); };
+  const a = r(1) * Math.PI * 2, d = .04 + Math.sqrt(r(2)) * 1.1;
+  return { x: Math.cos(a) * d, y: Math.sin(a) * d, z0: r(3), red: r(4) < .14, s: .6 + r(5) * .9 };
+});
+function warpDist(tt, tk) {
+  // Slow drift, then from tk the drive ramps over 0.9 s to full speed.
+  const base = .07 * tt, V = 2.4, R = .9;
+  if (tt <= tk) return base;
+  const u = tt - tk;
+  return base + (u < R ? V * u * u / (2 * R) : V * (R / 2 + (u - R)));
+}
+function drawWarp(t, tk) {
+  const w = bg.width, h = bg.height, cx = w / 2, cy = h / 2, f = Math.min(w, h) * .42, u = Math.min(w, h) / 540;
+  const tt = Math.max(0, t - INFLECT), D = warpDist(tt, tk), Dp = warpDist(Math.max(0, tt - 1 / 30), tk);
+  const fast = clamp((D - Dp) * 30 / 2.4, 0, 1);
+  g.lineCap = 'round';
+  for (const st of STARS) {
+    const z = 1 - ((st.z0 + D) % 1), zp = Math.min(1, z + (D - Dp) * (1 + fast * 1.5));
+    if (z < .02) continue;
+    const x = cx + st.x / z * f, y = cy + st.y / z * f;
+    if (x < -50 || x > w + 50 || y < -50 || y > h + 50) continue;
+    const xp = cx + st.x / zp * f, yp = cy + st.y / zp * f;
+    const a = clamp((1 - z) * 1.4, 0, 1) * clamp((z - .02) * 20, 0, 1);
+    const sz = Math.max(1, st.s * u * (1.6 - z));
+    g.strokeStyle = g.fillStyle = st.red ? `rgba(255,45,45,${a})` : `rgba(255,255,255,${a})`;
+    if (Math.hypot(x - xp, y - yp) > sz * 1.5) { g.lineWidth = sz; g.beginPath(); g.moveTo(xp, yp); g.lineTo(x, y); g.stroke(); }
+    else g.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+  }
+}
+
+// The logo compiles like a techno totem: its five parts arrive one per beat, stacked with gaps and
+// joined by the totems' little connector lines and dots. Each traces on as outline, then fills with
+// a pop and a red echo. When the last is in, the gaps snap shut into the whole logo, the warp drive
+// kicks in behind it, and from then on it kicks on every beat with the totems' spring ripple.
+const LOGO_LOCK = 5, LOGO_SNAP = .7;   // beats: when the stack starts closing, and how long it takes
 function drawCalmLogo(t, beats) {
   const w = bg.width, h = bg.height;
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  const k = beats - LOGO_BEAT0;                                  // beats since the cut-in
+  const spb = 60 / 146.75;
+  drawWarp(t, (LOGO_LOCK + LOGO_SNAP * .6) * spb);
   if (!logo.complete || !logo.naturalWidth) return;
   if (!logoKey) prepLogo();
-  const Wk = logoKey.width, Hk = logoKey.height;
-  const s = Math.min(w / Wk, h / Hk) * .74, lw = Wk * s, lh = Hk * s, lx = (w - lw) / 2, ly = (h - lh) / 2;
-  const k = beats - LOGO_BEAT0;                                  // beats since the cut-in
-  const nb = LOGO_BANDS.length - 1;
+  const Wk = logoKey.width, Hk = logoKey.height, nb = LOGO_BANDS.length - 1;
+  const GAP = .15;                                               // gap between parts, in logo heights
+  const s = Math.min(w / Wk, h / (Hk * (1 + GAP * (nb - 1)))) * .74, lw = Wk * s, lh = Hk * s;
+  const close = eInOut(clamp((k - LOGO_LOCK) / LOGO_SNAP, 0, 1)), gap = GAP * lh * (1 - close);
+  const totalH = lh + gap * (nb - 1), top = (h - totalH) / 2, mid = h / 2;
+  const beat = Math.floor(k), ph = k - beat;
+  // Spring ripple down the stack on each beat (only once a part is in).
+  const ripple = (i) => { const p = ph - i * .07; return p > 0 ? Math.exp(-p * 9) * Math.sin(p * 26) : 0; };
+  const parts = [];
   for (let i = 0; i < nb; i++) {
-    const p = k - i;                                             // this part arrives on beat i
-    if (p < 0) break;
     const y0 = LOGO_BANDS[i] * Hk, y1 = LOGO_BANDS[i + 1] * Hk, bh = y1 - y0;
-    const pop = Math.exp(-p * 7), z = 1 + pop * .14;            // the totems' pop on arrival
-    const cy = ly + (y0 + bh / 2) * s;
+    const py = top + y0 * s + gap * i;
+    const yc = py + bh * s / 2, dy = k > i + 1 ? -ripple(i) * (yc - mid) * .045 : 0;
+    parts.push({ i, y0, bh, py: py + dy, p: k - i });
+  }
+  // Connectors in the gaps, lit red in turn on the beat, fading as the stack closes.
+  if (gap > 1) for (let i = 0; i < nb - 1; i++) {
+    const a = parts[i], b = parts[i + 1];
+    if (a.p < .5 || b.p < 0) continue;
+    const y1 = a.py + a.bh * s, y2 = b.py, lit = ((beat % (nb - 1)) + nb - 1) % (nb - 1) === i;
+    g.globalAlpha = 1 - close;
+    g.strokeStyle = '#fff'; g.lineWidth = Math.max(1, lw * .004);
+    g.beginPath(); g.moveTo(w / 2, y1 + 2); g.lineTo(w / 2, y2 - 2); g.stroke();
+    g.fillStyle = lit ? '#ff2d2d' : '#fff';
+    g.beginPath(); g.arc(w / 2, (y1 + y2) / 2, lw * (lit ? .009 : .005), 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+  }
+  for (const { i, y0, bh, py, p } of parts) {
+    if (p < 0) continue;                                         // this part arrives on beat i
+    const pop = Math.exp(-p * 7) + (close > 0 && close < 1 ? .25 * Math.sin(close * Math.PI) : 0);
+    const z = 1 + pop * .14, cy = py + bh * s / 2;
     const blit = (img, ox = 0, reveal = 1) => {
       const rh = bh * reveal;
       g.drawImage(img, 0, y0, Wk, rh, w / 2 - lw * z / 2 + ox, cy - bh * s * z / 2, lw * z, rh * s * z);
     };
-    if (p < .3) {
-      // Tracing on: the outline draws down through the part.
-      blit(logoEdge, 0, Math.min(1, p / .3 + .15));
+    if (p < .4) {
+      // Tracing on, totem style: the outline draws down through the part, flickering.
+      if (Math.random() < .85) blit(logoEdge, 0, Math.min(1, p / .4 + .1));
     } else {
-      if (p < .8) { g.globalAlpha = Math.min(1, (.8 - p) * 3); blit(logoRed, lw * .035 * pop * 4); g.globalAlpha = 1; }
+      if (p < .9) { g.globalAlpha = Math.min(1, (.9 - p) * 3); blit(logoRed, lw * .035 * Math.exp(-p * 7) * 4); g.globalAlpha = 1; }
       blit(logoKey);
-      if (p < .6) { g.globalAlpha = (.6 - p) / .3 * .6; blit(logoEdge); g.globalAlpha = 1; }
+      if (p < .7) { g.globalAlpha = (.7 - p) / .3 * .6; blit(logoEdge); g.globalAlpha = 1; }
     }
   }
-  // Once whole: a red scan line sweeps down the logo, one pass every two bars.
-  if (k >= nb + .5) {
-    const sp = ((k - nb - .5) / 8) % 1, sy = sp * Hk, band = Hk * .045;
+  // Once locked: a red scan line sweeps down the logo, one pass every two bars.
+  const lx = (w - lw) / 2, ly = top;
+  if (close >= 1) {
+    const sp = ((k - LOGO_LOCK - LOGO_SNAP) / 8) % 1, sy = sp * Hk, band = Hk * .045;
     const y0 = Math.max(0, sy - band), y1 = Math.min(Hk, sy + band);
     if (y1 > y0) g.drawImage(logoRed, 0, y0, Wk, y1 - y0, lx, ly + y0 * s, lw, (y1 - y0) * s);
   }
