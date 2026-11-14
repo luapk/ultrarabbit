@@ -73,6 +73,12 @@ ov.className = 'layer';
 Object.assign(ov.style, { width: '100%', height: '100%', zIndex: 2, display: 'none', pointerEvents: 'none' });
 canvas.after(ov);
 const OV = { on: false };
+// The load counter and COMPLETE sit on their own canvas at the very top of the page (above the HUD,
+// tracker read-outs and every other layer; only the entry gate is higher).
+const topc = document.createElement('canvas'), tg = topc.getContext('2d');
+Object.assign(topc.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', zIndex: 9, display: 'none', pointerEvents: 'none' });
+document.body.appendChild(topc);
+const TOPC = { on: false };
 const scene = new THREE.Scene();
 scene.background = bgTex;
 const cam = new THREE.PerspectiveCamera(42, 1, .002, 100);
@@ -141,6 +147,7 @@ function fit() {
   const k = Math.min(1, 1280 / W);
   bg.width = Math.round(W * k); bg.height = Math.round(H * k);
   ov.width = bg.width; ov.height = bg.height;
+  topc.width = bg.width; topc.height = bg.height;
   cam.aspect = W / H; cam.updateProjectionMatrix();
   golden = null;
 }
@@ -333,27 +340,31 @@ function drawHud(t, beats) {
   // sits on top of everything, wireframes included.
   og.clearRect(0, 0, ov.width, ov.height);
   // Until then, one big load counter over the wireframes in the arcade headline type.
-  // Both drawn centred, pulsing on the beat; never wider than the frame.
+  if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
+  return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
+}
+
+// The load counter (one figure for both subjects) and then COMPLETE, centred on the top canvas,
+// pulsing on the beat and never wider than the frame. COMPLETE punches in on each beat and blinks off
+// just before the next.
+function drawLoadTop(t, beats, pe, pa) {
+  const w = topc.width, h = topc.height, u = Math.min(w, h) / 540, ph = beats - Math.floor(beats);
+  tg.clearRect(0, 0, w, h);
   const centre = (c, y, pop) => {
     if (!c) return;
     const fit = Math.min(1, w * .9 / (c.width * c.px));
-    og.save(); og.imageSmoothingEnabled = false;
+    tg.save(); tg.imageSmoothingEnabled = false;
     const cw = c.width * c.px * pop * fit, chh = c.height * c.px * pop * fit;
-    og.drawImage(c, (w - cw) / 2, y - chh / 2, cw, chh);
-    og.restore();
+    tg.drawImage(c, (w - cw) / 2, y - chh / 2, cw, chh);
+    tg.restore();
   };
   const px = Math.max(3, 4.6 * u);
   if (t < LOADED.module) {
     const pc = Math.round((pe + pa) / 2 * 100);
     centre(chunky(`${pc}%`, (w >= h ? 120 : 96) * u, px), h * .5, ph < .12 ? 1.04 : 1);
   } else if (ph < .8) {
-    // MODULE LOADED in the same type, punching in on each beat and blinking off just before the next.
-    const pop = 1 + Math.exp(-ph * 10) * .08;
-    if (w >= h) centre(chunky('MODULE LOADED', 64 * u, px), h * .5, pop);
-    else { centre(chunky('MODULE', 64 * u, px), h * .5 - 40 * u, pop); centre(chunky('LOADED', 64 * u, px), h * .5 + 40 * u, pop); }
+    centre(chunky('COMPLETE', (w >= h ? 90 : 64) * u, px), h * .5, 1 + Math.exp(-ph * 10) * .08);
   }
-  if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
-  return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
 }
 
 /* ---------------- arcade headline type ("Blood"): heavy, tilted, hard pixels, solid block ---------------- */
@@ -432,6 +443,8 @@ function update(t, beats, live, idle) {
   const on = !!which && !!meshes.eva && !!meshes.andy && (which !== 'intro' || (!!meshes.evaBody && !!meshes.andyBody));
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
   if (on !== OV.on) { OV.on = on; ov.style.display = on ? 'block' : 'none'; }
+  const topOn = on && which === 'intro' && t >= LOGO.glow;
+  if (topOn !== TOPC.on) { TOPC.on = topOn; topc.style.display = topOn ? 'block' : 'none'; }
   if (on) og.clearRect(0, 0, ov.width, ov.height);
   if (on && which === 'logo') { fit(); for (const m of Object.values(meshes)) m.visible = false; drawCalmLogo(t, beats); bgTex.needsUpdate = true; renderer.render(scene, cam); return true; }
   if (!on) return false;
@@ -472,6 +485,7 @@ function update(t, beats, live, idle) {
       cam.fov = MCAM.fov; cam.updateProjectionMatrix();
       cam.position.set(0, 0, MCAM.d); cam.lookAt(0, 0, 0);
       trackerData(t, [['andy', andyBody, loads[1]], ['eva', evaBody, loads[0]]]);
+      drawLoadTop(t, beats, loads[2], loads[3]);
     }
   }
   if (which !== 'intro') {
