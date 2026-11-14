@@ -333,25 +333,24 @@ function drawHud(t, beats) {
   // sits on top of everything, wireframes included.
   og.clearRect(0, 0, ov.width, ov.height);
   // Until then, one big load counter over the wireframes in the arcade headline type.
+  // Both drawn centred, pulsing on the beat; never wider than the frame.
+  const centre = (c, y, pop) => {
+    if (!c) return;
+    const fit = Math.min(1, w * .9 / (c.width * c.px));
+    og.save(); og.imageSmoothingEnabled = false;
+    const cw = c.width * c.px * pop * fit, chh = c.height * c.px * pop * fit;
+    og.drawImage(c, (w - cw) / 2, y - chh / 2, cw, chh);
+    og.restore();
+  };
+  const px = Math.max(3, 4.6 * u);
   if (t < LOADED.module) {
-    const pc = Math.round((pe + pa) / 2 * 100), pop = ph < .12 ? 1.04 : 1;
-    const c = chunky(`${pc}%`, (w >= h ? 120 : 96) * u, Math.max(3, 4.6 * u));
-    if (c) {
-      og.save(); og.imageSmoothingEnabled = false;
-      const cw = c.width * c.px * pop, chh = c.height * c.px * pop;
-      og.drawImage(c, (w - cw) / 2, h * .5 - chh / 2, cw, chh);
-      og.restore();
-    }
-  }
-  if (t >= LOADED.module) {
-    const blink = ph < .55, fs = (w >= h ? 34 : 24) * u;
-    og.font = `700 ${fs}px "Fira Code", ui-monospace, monospace`;
-    const label = 'MODULE LOADED', tw = og.measureText(label).width, px = 22 * u, bh = fs * 1.7;
-    const bx = (w - tw) / 2 - px, by = h * .5 - bh / 2;
-    og.fillStyle = blink ? '#ff2d2d' : '#000'; og.fillRect(bx, by, tw + px * 2, bh);
-    og.strokeStyle = '#ff2d2d'; og.lineWidth = 2 * u; og.strokeRect(bx, by, tw + px * 2, bh);
-    og.fillStyle = blink ? '#fff' : '#ff2d2d'; og.textAlign = 'center'; og.textBaseline = 'middle';
-    og.fillText(label, w / 2, h * .5 + 1);
+    const pc = Math.round((pe + pa) / 2 * 100);
+    centre(chunky(`${pc}%`, (w >= h ? 120 : 96) * u, px), h * .5, ph < .12 ? 1.04 : 1);
+  } else if (ph < .8) {
+    // MODULE LOADED in the same type, punching in on each beat and blinking off just before the next.
+    const pop = 1 + Math.exp(-ph * 10) * .08;
+    if (w >= h) centre(chunky('MODULE LOADED', 64 * u, px), h * .5, pop);
+    else { centre(chunky('MODULE', 64 * u, px), h * .5 - 40 * u, pop); centre(chunky('LOADED', 64 * u, px), h * .5 + 40 * u, pop); }
   }
   if (fade > 0) { g.fillStyle = `rgba(255,255,255,${fade})`; g.fillRect(0, 0, w, h); }
   return [prog(0, LOADED.eva), prog(.8, LOADED.andy), pe, pa];
