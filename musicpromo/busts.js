@@ -361,7 +361,7 @@ function drawLoadTop(t, beats, pe, pa) {
   const px = Math.max(3, 4.6 * u);
   if (t < LOADED.module) {
     const pc = Math.round((pe + pa) / 2 * 100);
-    centre(chunky(`${pc}%`, (w >= h ? 120 : 96) * u, px), h * .5, ph < .12 ? 1.04 : 1);
+    centre(chunky(`${pc}%`, (w >= h ? 120 : 96) * u, px), h * .5, 1 + Math.exp(-ph * 9) * .03);
   } else if (ph < .8) {
     centre(chunky('COMPLETE', (w >= h ? 90 : 64) * u, px), h * .5, 1 + Math.exp(-ph * 10) * .08);
   }
@@ -485,7 +485,7 @@ function update(t, beats, live, idle) {
       cam.fov = MCAM.fov; cam.updateProjectionMatrix();
       cam.position.set(0, 0, MCAM.d); cam.lookAt(0, 0, 0);
       trackerData(t, [['andy', andyBody, loads[1]], ['eva', evaBody, loads[0]]]);
-      drawLoadTop(t, beats, loads[2], loads[3]);
+      drawLoadTop(t, beats, loads[0], loads[1]);   // the smooth progress, not the bars' 24 steps
     }
   }
   if (which !== 'intro') {
