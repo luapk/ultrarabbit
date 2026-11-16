@@ -35,7 +35,8 @@ const put = (c, px, py, align = 'c') => { if (c) x.drawImage(c, Math.round(align
 
 const STARS = Array.from({ length: 140 }, (_, i) => [((Math.sin(i * 127.1) * 43758.5453 % 1) + 1) % 1, ((Math.sin(i * 311.7) * 9631.17 % 1) + 1) % 1, ((Math.sin(i * 74.7) * 5333.3 % 1) + 1) % 1]);
 const HOR = 196, LOGO_Y = 10, LOGO_H = 180;
-const ST = { credit: 0, coinAt: -1, run: true };
+// mode: 'insert' (INSERT COIN), 'credit' (coin in, PRESS START blinking), 'start' (PRESS START flashing fast).
+const ST = { credit: 0, mode: 'insert', modeAt: 0, run: true, base: 0 };
 
 function render(t) {
   x.fillStyle = BLACK; x.fillRect(0, 0, W, H);
@@ -69,10 +70,10 @@ function render(t) {
   // arcade HUD
   put(pix('000000', WHITE), 16, 17, 'l'); put(pix('13371337', WHITE), W / 2, 17); put(pix('000000', WHITE), W - 16, 17, 'r');
   put(pix('1UP', RED), 16, 3, 'l'); put(pix('HI-SCORE', RED), W / 2, 3); put(pix('2UP', RED), W - 16, 3, 'r');
-  const coin = ST.coinAt >= 0 ? t - ST.coinAt : -1;
-  if (coin >= 0) {
-    // coin in: PRESS START flashes fast
-    if ((coin * 8) % 1 < .6) { put(pix('PRESS START', WHITE), W / 2, 212); }
+  if (ST.mode === 'start') {
+    if (((t - ST.modeAt) * 8) % 1 < .6) put(pix('PRESS START', WHITE), W / 2, 212);
+  } else if (ST.mode === 'credit') {
+    if ((t % 1) < .62) put(pix('PRESS START', WHITE), W / 2, 212);
   } else if ((t % 1) < .62) {
     put(pix('INSERT COIN', WHITE), W / 2, 212);
     if (JP.complete && JP.naturalWidth) { x.fillStyle = BLACK; x.fillRect(Math.round(W / 2 - JP.width / 2) - 3, 225, JP.width + 6, JP.height + 2); x.drawImage(JP, Math.round(W / 2 - JP.width / 2), 226); }
@@ -101,7 +102,10 @@ function chime() {
 const t0 = performance.now();
 const now = () => (performance.now() - t0) / 1000;
 window.burrowTitle = {
-  coin() { ST.credit = 1; ST.coinAt = now(); chime(); setTimeout(() => { ST.run = false; }, 700); },
+  // The coin: CREDIT 01, chime, and the gate's own loop hands over to the film (frame() below).
+  coin() { ST.credit = 1; ST.mode = 'credit'; ST.base = now(); chime(); setTimeout(() => { ST.run = false; }, 700); },
+  // The film opens on this screen: draw it at song time t ('credit' or 'start') and return the canvas.
+  frame(t, mode, modeAt = 0) { ST.credit = 1; ST.mode = mode; ST.modeAt = ST.base + modeAt; render(ST.base + t); return cv; },
   render,
 };
 (function loop() { if (ST.run) { render(now()); requestAnimationFrame(loop); } })();

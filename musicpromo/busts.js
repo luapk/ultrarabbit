@@ -245,17 +245,18 @@ const SFX = {
 };
 
 /* ---------------- intro: coin in, the two load part by part on an arcade monitor ---------------- */
-// From the coin drop (0:00) to the portal (0:18.18). Both full-length wireframes load from the feet up,
-// and the camera cuts on the bar between close-ups of whichever part is loading, Andy then Eva:
+// From the coin drop (0:00) to the portal (0:18.18). The film opens on the arcade title screen (CREDIT 01,
+// PRESS START) for two bars; then both full-length wireframes load from the feet up, and the camera cuts on the half bar between close-ups of whichever part is loading, Andy then Eva:
 // footwear, torso, face, ears. Bar 7 revisits the finished parts on the beat, bar 8 is the wide with
 // COMPLETE, then PLAYER 1 / PLAYER 2, READY? and GO! into the walk.
 const BEAT = 60 / 146.75, BAR = (k) => .130 + k * 4 * BEAT;
 const READY_END = 18.183;
+const TITLE_END = BAR(2), START_AT = BAR(1.5);   // the film opens on the title screen; START pressed half a bar before the cut
 const SHOTS = [
-  { a: 0, b: BAR(1), who: 'andy', part: 'FOOTWEAR', f: .05, d: .62, ang: .55, spin: .22, up: .16 },
-  { a: BAR(1), b: BAR(2), who: 'eva', part: 'FOOTWEAR', f: .05, d: .62, ang: -.55, spin: -.22, up: .16 },
-  { a: BAR(2), b: BAR(3), who: 'andy', part: 'TORSO', f: .62, d: .78, ang: -.35, spin: .16, up: .02 },
-  { a: BAR(3), b: BAR(4), who: 'eva', part: 'TORSO', f: .6, d: .72, ang: .35, spin: -.16, up: .02 },
+  { a: BAR(2), b: BAR(2.5), who: 'andy', part: 'FOOTWEAR', f: .05, d: .62, ang: .55, spin: .14, up: .16 },
+  { a: BAR(2.5), b: BAR(3), who: 'eva', part: 'FOOTWEAR', f: .05, d: .62, ang: -.55, spin: -.14, up: .16 },
+  { a: BAR(3), b: BAR(3.5), who: 'andy', part: 'TORSO', f: .62, d: .78, ang: -.35, spin: .1, up: .02 },
+  { a: BAR(3.5), b: BAR(4), who: 'eva', part: 'TORSO', f: .6, d: .72, ang: .35, spin: -.1, up: .02 },
   // Faces and ears use the detailed head models (bust: true); rv is the load sweep across the shot.
   { a: BAR(4), b: BAR(5), who: 'andy', part: 'FACE', bust: true, f: .76, d: .95, ang: .3, spin: -.18, up: 0, rv: [.5, .92] },
   { a: BAR(5), b: BAR(6), who: 'eva', part: 'FACE', bust: true, f: .6, d: .95, ang: -.3, spin: .18, up: 0, rv: [.4, .8] },
@@ -269,8 +270,8 @@ const SHOTS = [
 // Loading progress (fraction of height, feet up) per figure: each one's edge sweeps through the part on
 // screen during its own shots, and carries on quietly while the other is shown.
 const LOAD_KF = {
-  andy: [[0, 0], [BAR(1), .14], [BAR(2), .5], [BAR(3), .84], [BAR(4), .86], [BAR(5), .97], [BAR(6), .97], [BAR(6.5), 1.02]],
-  eva: [[0, 0], [BAR(1), 0], [BAR(2), .14], [BAR(3), .5], [BAR(4), .75], [BAR(5), .76], [BAR(6), .88], [BAR(6.5), .88], [BAR(7), 1.02]],
+  andy: [[0, 0], [BAR(2), 0], [BAR(2.5), .14], [BAR(3), .5], [BAR(3.5), .82], [BAR(4), .84], [BAR(5), .97], [BAR(6), .97], [BAR(6.5), 1.02]],
+  eva: [[0, 0], [BAR(2.5), 0], [BAR(3), .14], [BAR(3.5), .5], [BAR(4), .75], [BAR(5), .76], [BAR(6), .88], [BAR(6.5), .88], [BAR(7), 1.02]],
 };
 const loadAt = (kf, t) => {
   if (t <= kf[0][0]) return kf[0][1];
@@ -311,41 +312,57 @@ function drawArcade(t, beats, shot, la, le) {
   if (beats - beat < .5) { g.fillStyle = '#ff2d2d'; g.beginPath(); g.arc(m + 18 * u, m + 52 * u, 4 * u, 0, Math.PI * 2); g.fill(); px(fs * .8, '#fff'); g.textAlign = 'left'; g.fillText('REC', m + 26 * u, m + 48 * u); }
 }
 
-// Big arcade headlines on the top canvas: COMPLETE (bar 8), READY? (bar 9), GO! (bar 10 to the portal).
+// Big arcade headlines on the top canvas, in Japanese: コンプリート！ (bar 8), レディ？ (bar 9), ゴー！ (bar 10
+// to the portal). Baked in the Blood style (title/hd_*.png) at the size chunky() would draw them, then
+// blown up with hard pixels.
+const HEADS = Object.fromEntries(['complete', 'ready', 'go'].map((k) => { const i = new Image(); i.src = `/musicpromo/title/hd_${k}.png`; return [k, i]; }));
 function drawTopText(t, beats) {
   const w = topc.width, h = topc.height, u = Math.min(w, h) / 540, ph = beats - Math.floor(beats);
   tg.clearRect(0, 0, w, h);
-  const word = t >= BAR(10) ? 'GO!' : t >= BAR(9) ? 'READY?' : t >= BAR(8) ? 'COMPLETE' : null;
-  if (!word || ph >= .8 && word !== 'GO!') return;
-  if (word === 'GO!' && t >= READY_END - .25) return;
-  const c = chunky(word, (w >= h ? (word === 'GO!' ? 150 : 96) : 64) * u, Math.max(3, 4.6 * u));
-  if (!c) return;
-  const fit = Math.min(1, w * .9 / (c.width * c.px)), pop = 1 + Math.exp(-ph * 10) * .08;
-  const cw = c.width * c.px * pop * fit, chh = c.height * c.px * pop * fit;
+  const word = t >= BAR(10) ? 'go' : t >= BAR(9) ? 'ready' : t >= BAR(8) ? 'complete' : null;
+  if (!word || ph >= .8 && word !== 'go') return;
+  if (word === 'go' && t >= READY_END - .25) return;
+  const c = HEADS[word], px = Math.max(3, 4.6 * u);
+  if (!c.complete || !c.naturalWidth) return;
+  const fit = Math.min(1, w * .9 / (c.width * px)), pop = 1 + Math.exp(-ph * 10) * .08;
+  const cw = c.width * px * pop * fit, chh = c.height * px * pop * fit;
   tg.save(); tg.imageSmoothingEnabled = false; tg.drawImage(c, (w - cw) / 2, h * .5 - chh / 2, cw, chh); tg.restore();
 }
 
-// The portal: a black-and-white hypnotic spiral opens from the centre under GO!, spinning faster as it
-// grows, and fills the screen exactly at the cut to the portal-in-the-wall shot (READY_END).
-const PORTAL_A = 17.0;
+// The portal: the same vortex as the portal in the wall (six black-and-white arms curling into a tight
+// tunnel, a white rim inside a dark stone ring, turning counter-clockwise at about 59°/s) opens from the
+// centre under ゴー！ and fills the screen exactly at the cut to the wall shot (READY_END), already turning
+// at the wall portal's speed so the motion carries through the cut.
+const PORTAL_A = 17.0, PV = { c: null, x: null, img: null };
 function drawPortal(t) {
   if (t < PORTAL_A) return;
-  const w = topc.width, h = topc.height, cx = w / 2, cy = h / 2, diag = Math.hypot(w, h) / 2;
-  const k = clamp((t - PORTAL_A) / (READY_END - PORTAL_A), 0, 1), R = diag * 1.04 * Math.pow(k, 1.6);
-  if (R < 1) return;
-  const spin = -(t - PORTAL_A) * (6 + 10 * k), turns = 5, pitch = R / turns;
-  tg.save();
-  tg.beginPath(); tg.arc(cx, cy, R, 0, Math.PI * 2); tg.clip();
-  tg.fillStyle = '#fff'; tg.fillRect(cx - R, cy - R, R * 2, R * 2);
-  // two-armed Archimedean spiral: the black band runs between r(θ) and r(θ - π)
-  tg.fillStyle = '#000'; tg.beginPath();
-  const n = 260, top = turns * Math.PI * 2 + Math.PI;
-  for (let i = 0; i <= n; i++) { const th = (i / n) * top, r = pitch * th / (Math.PI * 2); tg.lineTo(cx + Math.cos(th + spin) * r, cy + Math.sin(th + spin) * r); }
-  for (let i = n; i >= 0; i--) { const th = (i / n) * top, r = Math.max(0, pitch * (th - Math.PI) / (Math.PI * 2)); tg.lineTo(cx + Math.cos(th + spin) * r, cy + Math.sin(th + spin) * r); }
-  tg.closePath(); tg.fill();
-  tg.restore();
-  // hard black rim while it is still opening
-  if (k < .97) { tg.strokeStyle = '#000'; tg.lineWidth = Math.max(3, R * .03); tg.beginPath(); tg.arc(cx, cy, R, 0, Math.PI * 2); tg.stroke(); }
+  const w = topc.width, h = topc.height, diag = Math.hypot(w, h) / 2;
+  const k = clamp((t - PORTAL_A) / (READY_END - PORTAL_A), 0, 1), R = diag * 1.02 * Math.pow(k, 1.6);
+  if (R < 2) return;
+  // Rendered per pixel at half resolution, then scaled up.
+  const pw = Math.ceil(w / 2), phh = Math.ceil(h / 2);
+  if (!PV.c || PV.c.width !== pw || PV.c.height !== phh) { PV.c = document.createElement('canvas'); PV.c.width = pw; PV.c.height = phh; PV.x = PV.c.getContext('2d'); PV.img = PV.x.createImageData(pw, phh); }
+  const D = PV.img.data, r0 = R / 2, cx = pw / 2, cy = phh / 2, N = 6, TW = 4.5, TAU = Math.PI * 2;
+  // spin: twice the wall's speed as it opens, easing to exactly the wall's speed at the cut
+  const tt = t - PORTAL_A, wv = 1.03, spin = wv * (tt + .5 * (READY_END - PORTAL_A) * (1 - (1 - k) ** 2)) * N / TAU;
+  for (let y = 0; y < phh; y++) {
+    for (let x = 0; x < pw; x++) {
+      const i = (y * pw + x) * 4, dx = x - cx + .5, dy = y - cy + .5, rr = Math.hypot(dx, dy) / r0;
+      let v, a = 255;
+      if (rr > 1.07) { a = 0; v = 0; }
+      else if (rr > 1) v = 58 + ((x * 7 + y * 13) % 5) * 6;          // stone ring
+      else if (rr > .955) v = 238;                                    // white rim
+      else if (rr < .035) v = 8;                                      // the tunnel's black eye
+      else {
+        const th = Math.atan2(dy, dx), wob = .06 * Math.sin(th * 3 + Math.log(rr) * 4);
+        const p = (th * N / TAU - TW * Math.log(rr) + spin + wob) % 1;
+        v = (p < 0 ? p + 1 : p) < .5 ? 240 : 10;
+      }
+      D[i] = D[i + 1] = D[i + 2] = v; D[i + 3] = a;
+    }
+  }
+  PV.x.putImageData(PV.img, 0, 0);
+  tg.save(); tg.imageSmoothingEnabled = true; tg.drawImage(PV.c, 0, 0, w, h); tg.restore();
 }
 
 /* ---------------- arcade headline type ("Blood"): heavy, tilted, hard pixels, solid block ---------------- */
@@ -385,7 +402,8 @@ const SF = { t: -1, shot: -2, beat: -1, la: 0, le: 0 };
 function introSfx(t, beats, shot, la, le) {
   const dt = t - SF.t, beat = Math.floor(beats), cross = (x) => SF.t < x && t >= x;
   if (dt > 0 && dt < .3) {
-    if (shot !== SF.shot) SFX.blip(beat);
+    if (cross(START_AT)) SFX.module();
+    if (shot !== SF.shot && shot !== -2) SFX.blip(beat);
     else if (beat !== SF.beat && shot >= 0 && !SHOTS[shot].lock) SFX.tick();
     if ((la >= 1 && SF.la < 1) || (le >= 1 && SF.le < 1)) SFX.loaded();
     if (cross(BAR(8))) SFX.module();
@@ -417,7 +435,7 @@ function update(t, beats, live) {
   const on = !!which && !!meshes.eva && !!meshes.andy && (which !== 'intro' || (!!meshes.evaBody && !!meshes.andyBody));
   if (on !== shown) { shown = on; canvas.classList.toggle('on', on); }
   if (on !== OV.on) { OV.on = on; ov.style.display = on ? 'block' : 'none'; }
-  const topOn = on && which === 'intro' && t >= BAR(8);
+  const topOn = on && which === 'intro' && (t < TITLE_END || t >= BAR(8));
   if (topOn !== TOPC.on) { TOPC.on = topOn; topc.style.display = topOn ? 'block' : 'none'; }
   if (on) og.clearRect(0, 0, ov.width, ov.height);
   if (!on) return false;
@@ -433,6 +451,14 @@ function update(t, beats, live) {
     orbitIn(t, beats, EVA.a, EVA.b, new THREE.Vector3(0, .38, .02));
     eva.scale.setScalar(1);
     eva.material.uniforms.uLo.value = -.95; eva.material.uniforms.uHi.value = .95;
+  } else if (t < TITLE_END) {
+    // The arcade title screen, coin already in: PRESS START, then START pressed half a bar before the cut.
+    g.fillStyle = '#000'; g.fillRect(0, 0, bg.width, bg.height);
+    const tc = window.burrowTitle && burrowTitle.frame(t, t >= START_AT ? 'start' : 'credit', START_AT);
+    const w = topc.width, h = topc.height;
+    tg.fillStyle = '#000'; tg.fillRect(0, 0, w, h);
+    if (tc) { const s = Math.min(w / tc.width, h / tc.height), dw = tc.width * s, dh = tc.height * s; tg.imageSmoothingEnabled = false; tg.drawImage(tc, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+    introSfx(t, beats, -2, 0, 0);
   } else {
     const la = loadAt(LOAD_KF.andy, t), le = loadAt(LOAD_KF.eva, t);
     const si = SHOTS.findIndex((s) => t >= s.a && t < s.b), shot = SHOTS[si];
