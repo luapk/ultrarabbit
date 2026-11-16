@@ -125,7 +125,10 @@
   }
   #gate.gone { opacity: 0; pointer-events: none; }
 
-  #gate .go { font-size: 13px; letter-spacing: .3em; color: #000; background: #fff; padding: 12px 18px; }
+  /* The arcade title screen fills the gate (16:9, letterboxed in black); the download link sits under it. */
+  #gate { background: #000; gap: 0; padding: 0; }
+  #gate .go { display: block; width: min(100vw, calc(100vh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; image-rendering: pixelated; }
+  #gate .dl { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); white-space: nowrap; }
   #gate .alt { font-size: 11px; letter-spacing: .2em; color: #fff; }
   #gate .alt u { cursor: pointer; text-decoration-color: var(--red); text-underline-offset: 4px; }
   #gate .alt u:hover { color: var(--red); }
@@ -274,9 +277,10 @@
 </div>
 
 <div id="gate">
-  <div class="go">[ CLICK TO ENTER ]</div>
+  <canvas id="titleCv" class="go" aria-label="ULTRARABBIT: insert coin to start"></canvas>
   <a class="dl" href="/ThisIsWhoWeAre.mp3" download="ULTRARABBIT - This Is Who We Are.mp3">↓ DOWNLOAD THE TRACK</a>
 </div>
+<script src="/musicpromo/title.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="/totems.js"></script>
@@ -815,8 +819,11 @@ function saveLocalSync() {
 }
 
 // The line being sung right now. Lyrics only ever come from timings: no timings, no text.
+// Lyric typography is switched off for now (set to true to bring it back).
+const LYRICS_ON = false;
+
 function currentLine() {
-  if (mode !== 'track') return null;
+  if (!LYRICS_ON || mode !== 'track') return null;
   const ct = audio.currentTime;
   const ws = !(localSync[cur] && localSync[cur].length) && WORD_SYNC[cur];
   if (ws) return wordLine(ws, ct);
@@ -2073,6 +2080,9 @@ function updateHud() {
 }
 
 function enter(useMic) {
+  if (window.burrowTitle) burrowTitle.coin();
+  // Drop any logo burst queued while the title screen was up, so the film opens clean.
+  F.cuts = 0; cutCanvas.classList.remove('on');
   $('gate').classList.add('gone');
   ensureCtx();
   actx.resume();
