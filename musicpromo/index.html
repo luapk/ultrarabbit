@@ -313,6 +313,92 @@ const BAKED_SYNC = [
   null,
 ];
 
+// The typography follows these, not BAKED_SYNC (which still drives the band lip-sync cues): each line is
+// [text, start time of every word, last line of its verse/chorus], measured from the isolated vocal, so each
+// word slams in as it is sung. Includes the outro (3:13-3:58), which BAKED_SYNC does not cover.
+const WORD_SYNC = [[
+  ["WE'RE BLASTING OFF", [29.254, 29.464, 29.954], false],
+  ["WE'RE IN CONTROL", [30.890, 31.150, 31.310], false],
+  ["YOU CAN'T HOLD US BACK", [32.326, 32.526, 32.686, 32.936, 33.226], false],
+  ["WE'RE STANDING TALL", [34.161, 34.421, 34.861], false],
+  ["THE WORLD IS OURS", [35.766, 35.976, 36.216, 36.496], false],
+  ["SO IT BEGINS", [37.462, 37.672, 37.912], false],
+  ["THE ULTRARABBIT", [39.077, 39.287], false],
+  ["ALWAYS WINS", [40.543, 41.323], false],
+  ["THIS IS WHO WE ARE NOW", [42.581, 42.711, 42.911, 43.141, 43.401, 43.761], false],
+  ["THIS IS WHAT WE DO", [44.257, 44.367, 44.557, 44.767, 44.957], false],
+  ["THIS IS WHO WE ARE NOW", [45.852, 45.982, 46.182, 46.412, 46.672, 47.032], false],
+  ["THIS IS WHAT WE DO", [47.527, 47.637, 47.827, 48.037, 48.227], true],
+  ["WE'RE BEAUTIFUL", [55.401, 55.661], false],
+  ["WE'RE IN YOUR FACE", [57.077, 57.297, 57.437, 57.677], false],
+  ["WE'RE FIRST IN LINE", [58.693, 58.933, 59.093, 59.413], false],
+  ["OUR RIGHTFUL PLACE", [60.328, 60.528, 61.028], false],
+  ["THE WORLD IS OURS", [61.933, 62.143, 62.383, 62.663], false],
+  ["SO IT BEGINS", [63.629, 63.839, 64.079], false],
+  ["THE ULTRARABBIT", [65.244, 65.454], false],
+  ["ALWAYS WINS", [66.710, 67.490], false],
+  ["THIS IS WHO WE ARE NOW", [68.748, 68.878, 69.078, 69.308, 69.568, 69.928], false],
+  ["THIS IS WHAT WE DO", [70.424, 70.534, 70.724, 70.934, 71.124], false],
+  ["THIS IS WHO WE ARE NOW", [72.019, 72.149, 72.349, 72.579, 72.839, 73.199], false],
+  ["THIS IS WHAT WE DO", [73.695, 73.805, 73.995, 74.205, 74.395], true],
+  ["WE'RE COMING THROUGH", [81.608, 81.868, 82.248], false],
+  ["WE'RE COMING FAST", [83.194, 83.504, 83.884], false],
+  ["EAT OUR DUST", [85.049, 85.269, 85.559], false],
+  ["WE'RE SCREAMING PAST", [86.495, 86.775, 87.095], false],
+  ["THE WORLD IS OURS", [88.100, 88.310, 88.550, 88.830], false],
+  ["SO IT BEGINS", [89.795, 90.005, 90.245], false],
+  ["THE ULTRARABBIT", [91.411, 91.621], false],
+  ["ALWAYS WINS", [92.877, 93.657], false],
+  ["THIS IS WHO WE ARE NOW", [94.914, 95.044, 95.244, 95.474, 95.734, 96.094], false],
+  ["THIS IS WHAT WE DO", [96.591, 96.701, 96.891, 97.101, 97.291], false],
+  ["THIS IS WHO WE ARE NOW", [98.186, 98.316, 98.516, 98.746, 99.006, 99.366], false],
+  ["THIS IS WHAT WE DO", [99.862, 99.972, 100.162, 100.372, 100.562], true],
+  ["WE'RE BLASTING OFF", [127.381, 127.591, 128.081], false],
+  ["WE'RE IN CONTROL", [129.016, 129.276, 129.436], false],
+  ["YOU CAN'T HOLD US BACK", [130.451, 130.651, 130.811, 131.061, 131.351], false],
+  ["WE'RE STANDING TALL", [132.287, 132.547, 132.987], false],
+  ["THE WORLD IS OURS", [133.893, 134.103, 134.343, 134.623], false],
+  ["SO IT BEGINS", [135.587, 135.797, 136.037], false],
+  ["THE ULTRARABBIT", [137.203, 137.413], false],
+  ["ALWAYS WINS", [138.669, 139.449], false],
+  ["THIS IS WHO WE ARE NOW", [140.708, 140.838, 141.038, 141.268, 141.528, 141.888], false],
+  ["THIS IS WHAT WE DO", [142.383, 142.493, 142.683, 142.893, 143.083], false],
+  ["THIS IS WHO WE ARE NOW", [143.978, 144.108, 144.308, 144.538, 144.798, 145.158], false],
+  ["THIS IS WHAT WE DO", [145.654, 145.764, 145.954, 146.164, 146.354], true],
+  ["THE WORLD IS OURS", [153.518, 153.728, 153.968, 154.248], false],
+  ["SO IT BEGINS", [155.213, 155.423, 155.663], false],
+  ["THE ULTRARABBIT", [156.828, 157.038], false],
+  ["ALWAYS WINS", [158.294, 159.074], true],
+  ["THIS IS OUR TIME", [192.992, 193.202, 193.412, 193.702], false],
+  ["THIS IS OUR TIME", [194.627, 194.837, 195.047, 195.337], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [196.163, 196.303, 196.553, 196.873, 197.373], false],
+  ["THIS IS OUR TIME", [197.898, 198.108, 198.318, 198.608], true],
+  ["THIS IS OUR TIME", [199.534, 199.744, 199.954, 200.244], false],
+  ["THIS IS OUR TIME", [201.169, 201.379, 201.589, 201.879], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [202.705, 202.845, 203.095, 203.415, 203.915], false],
+  ["THIS IS OUR TIME", [204.440, 204.650, 204.860, 205.150], true],
+  ["THIS IS WHO WE ARE NOW", [205.945, 206.255, 206.455, 206.685, 206.945, 207.305], false],
+  ["THIS IS WHAT WE DO", [207.801, 207.911, 208.101, 208.311, 208.501], false],
+  ["THIS IS WHO WE ARE NOW", [209.216, 209.526, 209.726, 209.956, 210.216, 210.576], false],
+  ["THIS IS WHAT WE DO", [211.072, 211.182, 211.372, 211.582, 211.772], true],
+  ["THIS IS OUR TIME", [212.617, 212.827, 213.037, 213.327], false],
+  ["THIS IS OUR TIME", [214.253, 214.463, 214.673, 214.963], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [215.788, 215.928, 216.178, 216.498, 216.998], false],
+  ["THIS IS OUR TIME", [217.524, 217.734, 217.944, 218.234], true],
+  ["THIS IS OUR TIME", [219.159, 219.369, 219.579, 219.869], false],
+  ["THIS IS OUR TIME", [220.794, 221.004, 221.214, 221.504], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [222.330, 222.470, 222.720, 223.040, 223.540], false],
+  ["THIS IS OUR TIME", [224.065, 224.275, 224.485, 224.775], true],
+  ["THIS IS OUR TIME", [225.701, 225.911, 226.121, 226.411], false],
+  ["THIS IS OUR TIME", [227.336, 227.546, 227.756, 228.046], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [228.872, 229.012, 229.262, 229.582, 230.082], false],
+  ["THIS IS OUR TIME", [230.607, 230.817, 231.027, 231.317], true],
+  ["THIS IS OUR TIME", [232.242, 232.452, 232.662, 232.952], false],
+  ["THIS IS OUR TIME", [233.878, 234.088, 234.298, 234.588], false],
+  ["WE'RE LEAVING YOU BEHIND NOW", [235.413, 235.553, 235.803, 236.123, 236.623], false],
+  ["THIS IS OUR TIME", [237.149, 237.359, 237.569, 237.859], true]
+], null, null];
+
 // Beat grids for tracks that have one: sync-mode taps snap to the bar, then shift by the line's
 // pickup, so tapping only has to be within half a bar to come out exact.
 const TRACK_GRID = [
@@ -727,9 +813,11 @@ function saveLocalSync() {
 // The line being sung right now. Lyrics only ever come from timings: no timings, no text.
 function currentLine() {
   if (mode !== 'track') return null;
+  const ct = audio.currentTime;
+  const ws = !(localSync[cur] && localSync[cur].length) && WORD_SYNC[cur];
+  if (ws) return wordLine(ws, ct);
   const times = timingsFor(cur);
   if (!times || !times.length) return null;
-  const ct = audio.currentTime;
   let i = -1;
   for (let k = 0; k < times.length && times[k] <= ct; k++) i = k;
   if (i < 0) return null;
@@ -744,6 +832,23 @@ function currentLine() {
   return { i, start: times[i], paced, last, text, words };
 }
 
+// Word-timed lines: the active word is the last one sung. Same rules as above for which lines show;
+// a line clears half a second after its last word unless it ends a verse, which holds (full) until the next line.
+function wordLine(ws, ct) {
+  let i = -1;
+  for (let k = 0; k < ws.length && ws[k][1][0] <= ct; k++) i = k;
+  if (i < 0) return null;
+  const [text, wt, last] = ws[i], words = text.split(' ');
+  const first = i === 0 || ws[i - 1][2];
+  if (!first && !last && !REFRAIN.has(text) && !HIGHLIGHT.has(text)) return null;
+  const next = i + 1 < ws.length ? ws[i + 1][1][0] : Infinity;
+  const paced = Math.min(next, wt[wt.length - 1] + .5);
+  if (!last && ct >= paced) return null;
+  let wi = 0;
+  while (wi + 1 < wt.length && wt[wi + 1] <= ct) wi++;
+  return { i, start: wt[0], paced, last, text, words, wi, full: last && ct >= paced };
+}
+
 function syncText() {
   const L = currentLine();
   if (!L) {
@@ -751,8 +856,8 @@ function syncText() {
     return;
   }
   const ct = audio.currentTime;
-  const wi = Math.min(L.words.length - 1, Math.floor((ct - L.start) / (L.paced - L.start) * L.words.length));
-  const full = L.last && ct >= L.paced;
+  const wi = L.wi ?? Math.min(L.words.length - 1, Math.floor((ct - L.start) / (L.paced - L.start) * L.words.length));
+  const full = L.full ?? (L.last && ct >= L.paced);
   if (L.i !== T.sync) {
     T.sync = L.i;
     T.phrase = L.text; T.words = L.words; T.wi = T.active = wi; T.full = full;
