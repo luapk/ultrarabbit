@@ -25,10 +25,14 @@
     font-family: "Bebas Neue", Impact, "Arial Narrow", sans-serif;
     line-height: .82; text-transform: uppercase; white-space: nowrap;
   }
-  .txt .ln { display: block; line-height: .95; }
-  /* Every word sits on its own block so it reads over anything; the .on word is the highlighter. */
-  .txt .w { display: inline-block; background: var(--wb); color: var(--wt); padding: .05em .1em 0; margin: .02em .03em; }
-  .txt .w.on { background: var(--ab); color: var(--at); }
+  .txt .ln { display: block; line-height: 1.05; transform: skewX(-11deg) rotate(-3deg); }
+  /* Arcade "Blood" lyrics, as the HUD headlines: heavy Dela Gothic, tilted, red face, black extrude,
+     white keyline. The .on word (the one being sung) flips to a white face. */
+  @font-face { font-family: "DelaL"; src: url(/musicpromo/dela_lat.woff2) format("woff2"); font-display: block; }
+  .txt { font-family: "DelaL", "Bebas Neue", Impact, sans-serif; }
+  .txt .w { display: inline-block; color: #ff1a2e; -webkit-text-stroke: .03em #fff; paint-order: stroke fill;
+    text-shadow: 0.012em 0.012em 0 #000,0.024em 0.024em 0 #000,0.036em 0.036em 0 #000,0.048em 0.048em 0 #000,0.060em 0.060em 0 #000,0.072em 0.072em 0 #000,0.084em 0.084em 0 #000, 0.119em 0.084em 0 #fff,0.084em 0.119em 0 #fff,0.109em 0.109em 0 #fff,0.119em 0.119em 0 #fff,0.060em 0.109em 0 #fff,0.109em 0.060em 0 #fff; padding: 0 .06em; margin: 0 .04em; }
+  .txt .w.on { color: #fff; -webkit-text-stroke: .03em #ff1a2e; }
 
   #grain {
     inset: -160px; opacity: .09;
@@ -863,10 +867,6 @@ function syncText() {
     T.phrase = L.text; T.words = L.words; T.wi = T.active = wi; T.full = full;
     renderText();
     T.punch = 1; T.rot = rand(-3, 3);
-  } else if (T.mode === 'slam' && (wi !== T.wi || full !== T.full)) {
-    T.wi = T.active = wi; T.full = full;
-    renderText();
-    T.punch = 1; T.rot = full ? 0 : rand(-3, 3);
   } else if (!full && wi !== T.wi) {
     // The highlighter follows the vocal through the line.
     T.wi = T.active = wi;
@@ -906,6 +906,9 @@ function applyWordPalette() {
   for (const k in p) front.style.setProperty('--' + k, p[k]);
 }
 
+// Re-fit once the lyric font arrives (sizes are measured in it).
+document.fonts.load('100px DelaL').then(() => { if (T.phrase) renderText(); }).catch(() => {});
+
 function markActive() {
   T.els.forEach((el, i) => el.classList.toggle('on', T.els.length === 1 || i === T.active));
 }
@@ -917,8 +920,9 @@ function renderText() {
   T.els = [];
   if (T.mode === 'none' || !T.phrase) return;
   applyWordPalette();
-  const words = T.mode === 'slam' && !T.full ? [T.words[T.wi]] : T.words;
-  const lines = wrapLines(words, W / H > 1 ? 13 : 9).map((ws) => {
+  // Each sung line comes up once, whole, on one row (two on a portrait screen).
+  const words = T.words;
+  const lines = wrapLines(words, W / H > 1 ? 40 : 14).map((ws) => {
     const ln = document.createElement('span');
     ln.className = 'ln';
     for (const w of ws) {
@@ -951,8 +955,6 @@ function textSetup(textMode) {
 function textBeat() {
   T.beats++;
   if (T.sync < 0) return;
-  if (T.full && T.els.length > 1) { T.active = (T.active + 1) % T.els.length; markActive(); }
-  T.punch = Math.max(T.punch, .45);
 }
 
 function textUpdate(dt) {
