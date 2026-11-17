@@ -2030,6 +2030,7 @@ function cineUpdate(live, ct) {
 function footageUpdate() {
   const live = mode === 'track' && cur === 0 && !audio.paused;
   const ct = audio.currentTime;
+  window.__songT = ct;   // read by tv3d.js for the TV-wall pull-back
   TV.used = false;
   const gateOpen = !$('gate').classList.contains('gone');
   const on = cineUpdate(live, ct) | promoUpdate(live, ct)

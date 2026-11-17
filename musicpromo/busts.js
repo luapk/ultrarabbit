@@ -1,7 +1,6 @@
 // ULTRARABBIT music promo: the 3D wireframe busts of Eva and Andy.
 //  - Intro (0:00 to the portal at 0:18.18): after the coin goes in on the title screen, close-ups of
-//    each part of Eva and Andy loading on an arcade monitor, then the two side by side, READY? GO!,
-//    and a black-and-white spiral portal opens to fill the screen at the cut to the walk.
+//    each part of Eva and Andy loading on an arcade monitor, then the two side by side as PLAYER 1 / 2.
 //  - Chant scenes in the final third: Eva over golden rectangles, then Andy over golden spirals, each
 //    with a fast orbit that spirals into the head.
 // Driven by window.burrowBusts.update(songTime, beats, ct) from the page; returns true while on screen.
@@ -248,7 +247,7 @@ const SFX = {
 // From the coin drop (0:00) to the portal (0:18.18). The film opens on the arcade title screen (CREDIT 01,
 // PRESS START) for two bars; then both full-length wireframes load from the feet up, and the camera cuts on the half bar between close-ups of whichever part is loading, Andy then Eva:
 // footwear, torso, face, ears. Bar 7 revisits the finished parts on the beat, bar 8 is the wide with
-// COMPLETE, then PLAYER 1 / PLAYER 2, READY? and GO! into the walk.
+// COMPLETE, then PLAYER 1 / PLAYER 2 into the walk.
 const BEAT = 60 / 146.75, BAR = (k) => .130 + k * 4 * BEAT;
 const READY_END = 18.183;
 const TITLE_END = BAR(2), START_AT = BAR(1.5);   // the film opens on the title screen; START pressed half a bar before the cut
@@ -319,7 +318,8 @@ const HEADS = Object.fromEntries(['complete', 'ready', 'go'].map((k) => { const 
 function drawTopText(t, beats) {
   const w = topc.width, h = topc.height, u = Math.min(w, h) / 540, ph = beats - Math.floor(beats);
   tg.clearRect(0, 0, w, h);
-  const word = t >= BAR(10) ? 'go' : t >= BAR(9) ? 'ready' : t >= BAR(8) ? 'complete' : null;
+  // READY? / GO! now play over the walk, just before they step into the wall portal (in the edit).
+  const word = t >= BAR(8) && t < BAR(9) ? 'complete' : null;
   if (!word || ph >= .8 && word !== 'go') return;
   if (word === 'go' && t >= READY_END - .25) return;
   const c = HEADS[word], px = Math.max(3, 4.6 * u);
@@ -327,42 +327,6 @@ function drawTopText(t, beats) {
   const fit = Math.min(1, w * .9 / (c.width * px)), pop = 1 + Math.exp(-ph * 10) * .08;
   const cw = c.width * px * pop * fit, chh = c.height * px * pop * fit;
   tg.save(); tg.imageSmoothingEnabled = false; tg.drawImage(c, (w - cw) / 2, h * .5 - chh / 2, cw, chh); tg.restore();
-}
-
-// The portal: the same vortex as the portal in the wall (six black-and-white arms curling into a tight
-// tunnel, a white rim inside a dark stone ring, turning counter-clockwise at about 59°/s) opens from the
-// centre under ゴー！ and fills the screen exactly at the cut to the wall shot (READY_END), already turning
-// at the wall portal's speed so the motion carries through the cut.
-const PORTAL_A = 17.0, PV = { c: null, x: null, img: null };
-function drawPortal(t) {
-  if (t < PORTAL_A) return;
-  const w = topc.width, h = topc.height, diag = Math.hypot(w, h) / 2;
-  const k = clamp((t - PORTAL_A) / (READY_END - PORTAL_A), 0, 1), R = diag * 1.02 * Math.pow(k, 1.6);
-  if (R < 2) return;
-  // Rendered per pixel at half resolution, then scaled up.
-  const pw = Math.ceil(w / 2), phh = Math.ceil(h / 2);
-  if (!PV.c || PV.c.width !== pw || PV.c.height !== phh) { PV.c = document.createElement('canvas'); PV.c.width = pw; PV.c.height = phh; PV.x = PV.c.getContext('2d'); PV.img = PV.x.createImageData(pw, phh); }
-  const D = PV.img.data, r0 = R / 2, cx = pw / 2, cy = phh / 2, N = 6, TW = 4.5, TAU = Math.PI * 2;
-  // spin: twice the wall's speed as it opens, easing to exactly the wall's speed at the cut
-  const tt = t - PORTAL_A, wv = 1.03, spin = wv * (tt + .5 * (READY_END - PORTAL_A) * (1 - (1 - k) ** 2)) * N / TAU;
-  for (let y = 0; y < phh; y++) {
-    for (let x = 0; x < pw; x++) {
-      const i = (y * pw + x) * 4, dx = x - cx + .5, dy = y - cy + .5, rr = Math.hypot(dx, dy) / r0;
-      let v, a = 255;
-      if (rr > 1.07) { a = 0; v = 0; }
-      else if (rr > 1) v = 58 + ((x * 7 + y * 13) % 5) * 6;          // stone ring
-      else if (rr > .955) v = 238;                                    // white rim
-      else if (rr < .035) v = 8;                                      // the tunnel's black eye
-      else {
-        const th = Math.atan2(dy, dx), wob = .06 * Math.sin(th * 3 + Math.log(rr) * 4);
-        const p = (th * N / TAU - TW * Math.log(rr) + spin + wob) % 1;
-        v = (p < 0 ? p + 1 : p) < .5 ? 240 : 10;
-      }
-      D[i] = D[i + 1] = D[i + 2] = v; D[i + 3] = a;
-    }
-  }
-  PV.x.putImageData(PV.img, 0, 0);
-  tg.save(); tg.imageSmoothingEnabled = true; tg.drawImage(PV.c, 0, 0, w, h); tg.restore();
 }
 
 /* ---------------- arcade headline type ("Blood"): heavy, tilted, hard pixels, solid block ---------------- */
@@ -407,7 +371,6 @@ function introSfx(t, beats, shot, la, le) {
     else if (beat !== SF.beat && shot >= 0 && !SHOTS[shot].lock) SFX.tick();
     if ((la >= 1 && SF.la < 1) || (le >= 1 && SF.le < 1)) SFX.loaded();
     if (cross(BAR(8))) SFX.module();
-    if (cross(BAR(10))) SFX.loaded();
   }
   Object.assign(SF, { t, shot, beat, la, le });
 }
@@ -495,7 +458,6 @@ function update(t, beats, live) {
       trackerData(t, [['andy', andyBody, 1], ['eva', evaBody, 1]]);
     }
     drawTopText(t, beats);
-    drawPortal(t);
     introSfx(t, beats, si, la, le);
   }
   bgTex.needsUpdate = true;
