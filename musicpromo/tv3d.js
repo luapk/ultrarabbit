@@ -106,7 +106,10 @@ r.shadowMap.needsUpdate = true;
 
 // The TV wall: at 0:41 the camera pulls back to reveal the set as one of twenty identical TVs stacked
 // five wide and four high, every screen showing the same live footage (they share the screen texture).
-const WALL = { a: 41.0, b: 43.833, cols: 5, rows: 4, dx: 2.56, dy: 1.58, on: false };
+// At 1:32.75 the CCTV shot opens on the whole bank and creeps in on it. Each window runs p0 -> p1
+// (0 = the one TV, 1 = the full wall) between a and b, holding p1 for `hold` seconds after.
+const WALL = { cols: 5, rows: 4, dx: 2.56, dy: 1.58, on: false,
+  win: [{ a: 41.0, b: 43.833, p0: 0, p1: 1, hold: .5 }, { a: 92.75, b: 94.375, p0: 1, p1: .72, hold: 0 }] };
 const wall = new THREE.Group(); scene.add(wall); wall.visible = false;
 for (let r0 = 0; r0 < WALL.rows; r0++) for (let c = 0; c < WALL.cols; c++) {
   if (r0 === 0 && c === 2) continue;                 // the hero TV is the bottom-centre one
@@ -133,10 +136,10 @@ window.tvCCTV = {
     cam.position.set(Math.sin(a) * rad, ORBIT.h + Math.sin(k * Math.PI) * .12, Math.cos(a) * rad);
     cam.lookAt(0, ORBIT.look, 0);
     // Pull back from the one TV to the whole wall of twenty.
-    const st = window.__songT ?? -1, wOn = st >= WALL.a && st < WALL.b + .5;
+    const st = window.__songT ?? -1, w = WALL.win.find((v) => st >= v.a && st < v.b + v.hold), wOn = !!w;
     if (wOn !== WALL.on) { WALL.on = wOn; wall.visible = wOn; r.shadowMap.needsUpdate = true; }
     if (wOn) {
-      const p0 = Math.min(1, (st - WALL.a) / (WALL.b - WALL.a)), p = p0 * p0 * (3 - 2 * p0);
+      const u = Math.min(1, (st - w.a) / (w.b - w.a)), e = u * u * (3 - 2 * u), p = w.p0 + (w.p1 - w.p0) * e;
       const look = ORBIT.look + (WALL.dy * 1.5) * p, dist = rad * (1 + 3.4 * p);
       cam.position.set(Math.sin(a * (1 - p)) * dist, ORBIT.h + (WALL.dy * 1.5 + .3) * p + Math.sin(k * Math.PI) * .12 * (1 - p), Math.cos(a * (1 - p)) * dist);
       cam.lookAt(0, look, 0);
