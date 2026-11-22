@@ -209,7 +209,7 @@
   <div id="front" class="layer txt"></div>
   <video id="band" class="layer" muted playsinline preload="none"></video>
   <canvas id="bust3d" class="layer"></canvas>
-  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="snowVid" muted playsinline preload="auto" src="/musicpromo/snow.mp4"></video><video id="shrineVid" muted playsinline preload="auto" src="/musicpromo/shrine.mp4"></video></div>
+  <div id="cine" class="layer"><video id="cineVid" class="on" muted playsinline preload="auto" src="/musicpromo/cine.mp4"></video><video id="rideVid" muted playsinline preload="auto" src="/musicpromo/ride.mp4"></video><video id="snowVid" muted playsinline preload="auto" src="/musicpromo/snow.mp4"></video><video id="shrineVid" muted playsinline preload="auto" src="/musicpromo/shrine.mp4"></video><video id="hatVid" muted playsinline preload="auto" src="/musicpromo/hat.mp4"></video></div>
   <div id="promo" class="layer"><video id="promoVid" muted playsinline preload="auto" src="/musicpromo/band.mp4"></video>
     <div class="cctv" aria-hidden="true">
       <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
@@ -1955,6 +1955,7 @@ const CINE_CUES = [
   { a: 111.340, b: 113.793, file: 40.625, tv: 1 },   // ride selfie (on the TV): Eva screams with laughter, camera whips
   { a: 113.793, b: 116.246, file: 38.125, tv: 1 },   // ride selfie (on the TV), straight after: Andy fist-pumps, then reaches for the lens
   { a: 116.246, b: 127.037, file: 10.125, vid: 'ride' }, // rest of the bridge break: the ULTRARABBIT monolith, car out of its mouth, hyperspeed ring tunnel
+  { a: 153.458, b: 155.458, file: 0, vid: 'hat' },   // opens the golden-spiral chant: extreme close-up of Andy's LOVERBOY beanie label, settling his shades
   { a: 165.310, b: 181.664, file: 0, vid: 'snow' }, // replaces Andy's wireframe: white world, one drop down the giant mask, arcade HUD (stage 4)
   { a: 186.570, b: 189.022, file: 43.083, tv: 1 },   // ride selfie (on the TV): Andy lunges at camera, whip pan
   { a: 199.677, b: 211.800, file: 20.917, vid: 'ride' }, // instrumental after "this is our time": live-action spiral dive round the totem tower
@@ -1978,7 +1979,7 @@ const tvShow = (video, k, ov) => {
   if (ok) TV.used = true;
   return ok;
 };
-const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), snow: $('snowVid'), shrine: $('shrineVid') };
+const cineEl = $('cine'), CINE_VIDS = { cine: $('cineVid'), ride: $('rideVid'), snow: $('snowVid'), shrine: $('shrineVid'), hat: $('hatVid') };
 const CI = { on: false, primed: -1, vid: CINE_VIDS.cine };
 const cueVid = (c) => CINE_VIDS[c.vid || 'cine'];
 // Show one of the cinematic videos, pausing the other.
